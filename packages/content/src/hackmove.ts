@@ -18,6 +18,11 @@ import { P, hasProp } from './props';
 /** ref: src/decl.c dirs_ord[]: the order in which confdir() picks a random direction. */
 const DIRS_ORD: readonly Dir[] = ['w', 'n', 'e', 's', 'nw', 'ne', 'se', 'sw'];
 
+/** A random direction. ref: src/cmd.c confdir(FALSE): `dirs_ord[rn2(8)]` */
+export function confdir(ctx: Pick<Ctx, 'rng'>): Dir {
+  return DIRS_ORD[ctx.rng.rn2(DIRS_ORD.length)] ?? 'n';
+}
+
 /** ref: src/hack.c u_maybe_impaired(): stunned (confusion does not exist yet) */
 export function uMaybeImpaired(ctx: Ctx): boolean {
   return hasProp(getPlayer(ctx.state), P.STUNNED);

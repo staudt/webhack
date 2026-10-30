@@ -22,6 +22,7 @@ import {
 import { heroAttack, monsterIdAt } from './combat';
 import { escapeFromStickyMon, impairedDir } from './hackmove';
 import { lookHere } from './itemactions';
+import { askReallyAttack, needsAttackConfirm } from './peaceful';
 import { T } from './terrain';
 
 function playerAt(ctx: Ctx): Pos {
@@ -100,7 +101,14 @@ const move: ActionDef = {
     // consulted, so attacks work diagonally through doorways. (domove_core's "don't attack if
     // running" check belongs to travel/run, which is a different action.)
     const victim = monsterIdAt(ctx, to, pos.level);
-    if (victim !== null) return heroAttack(ctx, victim);
+    if (victim !== null) {
+      // ref: src/uhitm.c attack_checks(): "Really attack the dwarf?" for a peaceful monster in view
+      if (needsAttackConfirm(ctx, victim)) {
+        askReallyAttack(ctx, victim, 'nh:move', { victim });
+        return 0;
+      }
+      return heroAttack(ctx, victim);
+    }
     const check = checkStep(level, cellRules(level, ctx.defs), from, dir);
     if (check.ok) {
       // ref: src/hack.c domove()
@@ -134,6 +142,13 @@ const move: ActionDef = {
         return 0;
     }
   },
+  // The answer to "Really attack?": yes attacks, anything else costs nothing (context.move = 0).
+  answer(ctx, value, raw) {
+    const victim = (raw as { victim?: unknown } | null)?.victim;
+    if (value !== true || typeof victim !== 'number') return 0;
+    if (!ctx.state.entities[String(victim)]?.c.monster) return 0;
+    return heroAttack(ctx, victim);
+  },
 };
 
 const wait: ActionDef = {
@@ -156,7 +171,7 @@ function terrainUnderHero(ctx: Ctx): TerrainDef {
 }
 
 /** Sets a cell to terrain `id`, adding it to the level palette when missing. */
-function setTerrain(level: Level, x: number, y: number, id: DefId): void {
+export function setTerrain(level: Level, x: number, y: number, id: DefId): void {
   let pi = level.palette.indexOf(id);
   if (pi === -1) pi = level.palette.push(id) - 1;
   level.cells[cellIndex(level, x, y)] = pi;

@@ -225,7 +225,7 @@ describe('offers', () => {
 
   test('self offers wait and search with source nh', () => {
     const { q } = queryFor(['@']);
-    // plus run (asks a direction) and the item actions that apply anywhere: drop several (the kit) and discoveries
+    // plus run (asks a direction) and the item actions that apply anywhere: drop several (the kit) and discoveries, then kick
     expect(q.actionsFor({ kind: 'self' })).toEqual([
       { action: { type: 'wait' }, labelKey: 'action.wait', source: 'nh' },
       { action: { type: 'search' }, labelKey: 'action.search', source: 'nh' },
@@ -240,6 +240,7 @@ describe('offers', () => {
         labelKey: 'action.nh:discoveries',
         source: 'nh',
       },
+      { action: { type: 'mod', action: 'nh:kick' }, labelKey: 'action.nh:kick', source: 'nh' },
     ]);
   });
 

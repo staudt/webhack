@@ -42,20 +42,22 @@ function blessorcurse(rng: Rng, it: ItemComponent, chance: number): void {
 /**
  * Random initialization of an object's BUC, enchantment and quantity.
  * ref: src/mkobj.c mksobj_init() for weapon, food, potion, scroll, armor and coin classes.
- * Simplified: no is_multigen weapons (none of our weapons use ammo or missile skills), no
- * poison, no artifacts, no erosion; food has no corpse/egg/tin/slime-mold special cases (the
+ * Simplified: poisonable weapons roll for poison but are never poisoned, no artifacts, no erosion; food has no corpse/egg/tin/slime-mold special cases (the
  * corpse is made through mkcorpse(), which supplies the monster).
  */
 export function mksobjInit(
   ctx: Pick<ItemCtx, 'state' | 'rng'>,
-  def: Pick<ObjectDef, 'id' | 'class'>,
+  def: Pick<ObjectDef, 'id' | 'class' | 'weapon'>,
   it: ItemComponent,
   artif = false,
 ): void {
   const rng = ctx.rng;
   const lvl = heroLevelOf(ctx);
   switch (def.class) {
-    case 'weapon':
+    case 'weapon': {
+      // ref: is_multigen(): ammunition and missiles come in stacks of rn1(6, 6)
+      const multigen = def.weapon?.role === 'ammo' || def.weapon?.role === 'missile';
+      if (multigen) it.quantity = rng.rn2(6) + 6;
       if (rng.rn2(11) === 0) {
         it.spe = rne(rng, 3, lvl);
         it.buc = rng.rn2(2) === 0 ? 'uncursed' : 'blessed';
@@ -63,8 +65,17 @@ export function mksobjInit(
         it.buc = 'cursed';
         it.spe = -rne(rng, 3, lvl);
       } else blessorcurse(rng, it, 10);
+      // is_poisonable(): the roll is made, but poison is not ported (see DEVIATIONS.md)
+      if (multigen) rng.rn2(100);
       // ref: mksobj_init(): `artif && !rn2(20 + 10 * nartifact_exist())`; no artifacts exist
       if (artif) rng.rn2(20);
+      break;
+    }
+    case 'gem':
+      // ref: mksobj_init() GEM_CLASS: rocks come in rn1(6, 6); other stones (not luckstones)
+      // are a pair 1 time in 6
+      if (def.id === 'nh:rock') it.quantity = rng.rn2(6) + 6;
+      else if (rng.rn2(6) === 0) it.quantity = 2;
       break;
     case 'food':
       it.eaten = 0;

@@ -659,7 +659,8 @@ describe('passive attacks', () => {
       const r = hitMold(seed, 'nh:red_mold');
       if (keys(r.events).includes('passive.very_hot')) {
         burned = true;
-        expect(r.hpLost).toBeGreaterThanOrEqual(2);
+        // d(2,4) damage is 2 at least, but a point may be regenerated at the end of the turn
+        expect(r.hpLost).toBeGreaterThanOrEqual(1);
         expect(r.hpLost).toBeLessThanOrEqual(8);
       }
       const f = hitMold(seed, 'nh:red_mold', {

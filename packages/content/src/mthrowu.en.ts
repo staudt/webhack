@@ -1,0 +1,28 @@
+// English text for monsters' ranged attacks and the hero's shooting.
+// ref: src/mthrowu.c thitu(), m_throw(), monshoot(); src/dothrow.c throw_obj(), throwit()
+export const mthrowuMessagesEn: Record<string, string> = {
+  'mthrow.throws': 'The {mon} throws {item|an}!',
+  'mthrow.throws_n': 'The {mon} throws {n} {item}!',
+  'mthrow.shoots': 'The {mon} shoots {item|an}!',
+  'mthrow.shoots_n': 'The {mon} shoots {n} {item}!',
+  'mthrow.misfires': 'The {mon} misfires!',
+  'mthrow.slips': 'The {obj} slips as the {mon} throws it!',
+  'mthrow.hit': 'You are hit by {obj|an}.',
+  'mthrow.hit_hard': 'You are hit by {obj|an}!',
+  'mthrow.hit_nth': 'You are hit by the {nth} {obj}.',
+  'mthrow.hit_hard_nth': 'You are hit by the {nth} {obj}!',
+  'mthrow.miss': 'The {obj} misses you.',
+  'mthrow.miss_nth': 'The {nth} {obj} misses you.',
+  'mthrow.almost': 'You are almost hit by {obj|an}.',
+  'mthrow.almost_nth': 'You are almost hit by the {nth} {obj}.',
+  'mthrow.lands_miss': 'The {nth} {obj} misses.',
+  'mthrow.catch': 'You catch the {obj}!',
+  'mthrow.mon_killed': 'The {mon} is killed!',
+  'mthrow.mon_destroyed': 'The {mon} is destroyed!',
+  'action.nh:fire': 'Fire',
+  'throw.volley_shoot': 'You shoot {n} {item}.',
+  'throw.misfires': 'The {item} misfires!',
+  'throw.by_hand.bow': "You aren't wielding a bow, so you throw your arrow by hand.",
+  'throw.by_hand.crossbow': "You aren't wielding a crossbow, so you throw your bolt by hand.",
+  'throw.by_hand.sling': "You aren't wielding a sling, so you throw your stone by hand.",
+};

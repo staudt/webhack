@@ -149,33 +149,23 @@ export function mongets(ctx: GearCtx, monId: EntityId, otyp: string): EntityId |
 
 /**
  * Rolls mksobj_init() for an object this port lacks, to keep the random stream in step.
- * `multigen` and `poisonable` are the ammo/dart/missile cases.
+ * (Only the battle axe, two-handed sword and lucern hammer are still missing.)
  */
-function burnWeapon(ctx: GearCtx, multigen = false): void {
-  if (multigen) ctx.rng.rn2(6); // quan = rn1(6, 6)
+function burnWeapon(ctx: GearCtx): void {
   const dummy = { id: 'nh:none' as DefId, class: 'weapon' as const };
   const it = { quantity: 1, buc: 'uncursed', spe: 0 } as ItemComponent;
   mksobjInit(ctx, dummy, it);
-  if (multigen) ctx.rng.rn2(100); // is_poisonable && !rn2(100)
 }
 
 /**
- * A stack of 3..(oquan+2) missiles. ref: src/makemon.c m_initthrow(). Objects this port lacks
- * (darts, arrows, bolts, flint, rocks) still make their rolls: the object's own init and the
- * quantity.
+ * A stack of 3..(oquan+2) missiles. ref: src/makemon.c m_initthrow(): `mksobj(otyp, TRUE, FALSE)`
+ * (which rolls its own multigen quantity), then `quan = rn1(oquan, 3)`. Not ported: orcish
+ * arrows being poisoned (`opoisoned`).
  */
-function mInitThrow(
-  ctx: GearCtx,
-  monId: EntityId,
-  otyp: string,
-  oquan: number,
-  kind: 'ammo' | 'gem' | 'weapon' = 'weapon',
-): void {
+function mInitThrow(ctx: GearCtx, monId: EntityId, otyp: string, oquan: number): void {
   const def = objDef(ctx, otyp);
   if (!def) {
-    if (kind === 'ammo') burnWeapon(ctx, true);
-    else if (kind === 'gem') ctx.rng.rn2(6); // rock quan = rn1(6, 6) / flint 1 in 6 pair
-    ctx.rng.rn2(oquan); // otmp->quan = rn1(oquan, 3)
+    ctx.rng.rn2(oquan);
     return;
   }
   const id = mksobj(ctx, def, {});
@@ -199,8 +189,9 @@ export function mkmonmoney(ctx: GearCtx, monId: EntityId, amount: number): void 
 /**
  * The starting weapons and armor of an armed monster.
  * ref: src/makemon.c m_initweap(), for the roster's kobolds, gnomes, hobbit, hill orc and
- * dwarf. Objects missing from the object table (launchers, ammunition, darts, pick-axe,
- * crossbows) are not given, but the rolls C makes for them are.
+ * dwarf. Objects missing from the object table (pick-axe, battle axe, two-handed sword, lucern
+ * hammer) are not given, but the rolls C makes for them are. (Hill orcs get no bows here: in 5.0
+ * only Uruk-hai are given orcish bows.)
  */
 export function mInitWeap(ctx: GearCtx, monId: EntityId): void {
   const { def } = monOf(ctx, monId);
@@ -215,8 +206,8 @@ export function mInitWeap(ctx: GearCtx, monId: EntityId): void {
         mongets(ctx, monId, 'nh:elven_dagger');
         break;
       default:
-        burnWeapon(ctx); // a sling
-        mInitThrow(ctx, monId, rng.rn2(4) === 0 ? 'nh:flint' : 'nh:rock', 6, 'gem');
+        mongets(ctx, monId, 'nh:sling');
+        mInitThrow(ctx, monId, rng.rn2(4) === 0 ? 'nh:flint_stone' : 'nh:rock', 6);
         break;
     }
     if (rng.rn2(10) === 0) mongets(ctx, monId, 'nh:elven_mithril_coat');
@@ -253,25 +244,25 @@ export function mInitWeap(ctx: GearCtx, monId: EntityId): void {
       );
     }
   } else if (ch === 'k') {
-    if (rng.rn2(4) === 0) mInitThrow(ctx, monId, 'nh:dart', 12, 'ammo');
+    if (rng.rn2(4) === 0) mInitThrow(ctx, monId, 'nh:dart', 12);
   } else {
     // The general case. ref: m_initweap() `default:` (gnomes and any other armed monster)
     const bias = isLord(def) ? 1 : 0;
     switch (rng.rnd(14 - 2 * bias)) {
       case 1:
         if (isStrong(def)) getsOrBurn(ctx, monId, 'nh:battle_axe');
-        else mInitThrow(ctx, monId, 'nh:dart', 12, 'ammo');
+        else mInitThrow(ctx, monId, 'nh:dart', 12);
         break;
       case 2:
         if (isStrong(def)) getsOrBurn(ctx, monId, 'nh:two_handed_sword');
         else {
-          burnWeapon(ctx); // crossbow
-          mInitThrow(ctx, monId, 'nh:crossbow_bolt', 12, 'ammo');
+          mongets(ctx, monId, 'nh:crossbow');
+          mInitThrow(ctx, monId, 'nh:crossbow_bolt', 12);
         }
         break;
       case 3:
-        burnWeapon(ctx); // bow
-        mInitThrow(ctx, monId, 'nh:arrow', 12, 'ammo');
+        mongets(ctx, monId, 'nh:bow');
+        mInitThrow(ctx, monId, 'nh:arrow', 12);
         break;
       case 4:
         if (isStrong(def)) mongets(ctx, monId, 'nh:long_sword');
@@ -478,9 +469,18 @@ const welded = (o: Entity): boolean => o.c.item?.buc === 'cursed' && o.c.item.eq
  */
 export function monWieldItem(ctx: GearCtx, monId: EntityId): boolean {
   if (monFlag(ctx, 'nowep', monId)) return false;
-  const { e, def } = monOf(ctx, monId);
   const obj = selectHwep(ctx, monId);
   if (!obj) return false;
+  return monWield(ctx, monId, obj);
+}
+
+/**
+ * The common tail of mon_wield_item(): wield `obj` (already chosen by select_hwep() or
+ * select_rwep()), unless it is wielded already. Returns true if that cost the monster its move.
+ * ref: src/weapon.c mon_wield_item()
+ */
+export function monWield(ctx: GearCtx, monId: EntityId, obj: Entity): boolean {
+  const { e, def } = monOf(ctx, monId);
   const cur = monWep(ctx, monId);
   if (cur && cur.def === obj.def) return false; // already wielding it
   const pos = e.c.pos;

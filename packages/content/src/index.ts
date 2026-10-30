@@ -22,6 +22,9 @@ import { registerMklev } from './mklev';
 import { POTION_ACTIONS, POTION_USES } from './potion';
 import { READ_ACTIONS, SCROLL_USES } from './read';
 import { THROW_ACTIONS } from './dothrow';
+import { KICK_ACTIONS, registerKick } from './dokick';
+import { registerMonflee } from './monflee';
+import { FIRE_ACTIONS } from './fire';
 
 /** Potion and scroll effects, attached to the object defs (ObjectDef.use). */
 const USES = { ...POTION_USES, ...SCROLL_USES };
@@ -41,8 +44,12 @@ export const vanillaMod: Mod = {
     for (const a of POTION_ACTIONS) api.defineAction(a);
     for (const a of READ_ACTIONS) api.defineAction(a);
     for (const a of THROW_ACTIONS) api.defineAction(a);
+    for (const a of KICK_ACTIONS) api.defineAction(a);
+    for (const a of FIRE_ACTIONS) api.defineAction(a);
     registerNomul(api);
     registerProps(api);
+    registerKick(api);
+    registerMonflee(api);
     for (const a of EAT_ACTIONS) api.defineAction(a);
     registerCorpses(api);
     registerHunger(api);
@@ -157,6 +164,8 @@ export {
 export { healup, cureSick, POTION_ACTIONS } from './potion';
 export { READ_ACTIONS } from './read';
 export { THROW_ACTIONS } from './dothrow';
+export { FIRE_ACTIONS, FIRE_ID } from './fire';
+export { thrwmu, selectRwep, linedUp, shouldMulchMissile } from './mthrowu';
 export {
   gethungry,
   newuhs,
@@ -185,3 +194,6 @@ export {
   relobj,
 } from './mongear';
 export { xkilledCorpse, corpseChance, startCorpseTimeout, rnz, ROT_AGE } from './corpses';
+export { KICK_ACTIONS, KICK_ID, setWoundedLegs } from './dokick';
+export { monflee, isFleeing, fleeTime, stopFleeing } from './monflee';
+export { needsAttackConfirm, setmangry, wakeup } from './peaceful';

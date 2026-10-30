@@ -29,6 +29,7 @@ export const P = {
   FAST: 'fast',
   STEALTH: 'stealth',
   TELEPAT: 'telepat',
+  WOUNDED_LEGS: 'wounded_legs',
 } as const;
 
 /** True while the entity has the property, permanently or on a timer. ref: youprop.h (e.g. Stunned) */
@@ -126,6 +127,10 @@ function timeoutExpired(ctx: Ctx, hero: Entity, name: string): void {
         type: 'msg',
         key: hasProp(hero, P.FAST) ? 'timeout.slow_down_bit' : 'timeout.slow_down',
       });
+      break;
+    case P.WOUNDED_LEGS:
+      // ref: src/do.c heal_legs(0): "Your leg feels better." (only the right leg is ever hurt)
+      ctx.emit({ type: 'msg', key: 'timeout.legs_better' });
       break;
     case P.ACID_RES:
       if (!hasProp(hero, P.ACID_RES)) ctx.emit({ type: 'msg', key: 'timeout.acid_unsafe' });

@@ -5,6 +5,8 @@ import { magicMessagesEn } from './magic.en';
 import { eatMessagesEn } from './eat.en';
 import { monGearMessagesEn } from './mongear.en';
 import { resistMessagesEn } from './resist.en';
+import { kickMessagesEn } from './kick.en';
+import { mthrowuMessagesEn } from './mthrowu.en';
 
 export const messagesEn: Record<string, string> = {
   ...objectMessagesEn,
@@ -13,6 +15,8 @@ export const messagesEn: Record<string, string> = {
   ...eatMessagesEn,
   ...monGearMessagesEn,
   ...resistMessagesEn,
+  ...kickMessagesEn,
+  ...mthrowuMessagesEn,
   welcome: 'Hello, welcome to webhack! You are a {role}.',
   'welcome.back': 'Hello, welcome back to webhack! You are a {role}.',
   'door.opens': 'The door opens.',

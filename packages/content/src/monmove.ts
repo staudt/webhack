@@ -28,7 +28,9 @@ import {
   mpickstuff,
   setMonFlag,
 } from './mongear';
+import { mattackRanged } from './mthrowu';
 import { P, heroHas } from './props';
+import { isFleeing, regainCourage } from './monflee';
 import { acurrstr } from './stats';
 
 /** ref: include/hack.h BOLT_LIM */
@@ -338,9 +340,9 @@ function mSearchItems(
 /**
  * Chooses and performs one step. ref: src/monmove.c m_move() and postmov().
  * The goal is where the monster thinks the hero is (set_apparxy: the true position, since we
- * have no invisibility or displacement). appr is 1 (approach) for hostiles, 0 (wander) for
- * peacefuls and, one time in three, for bats. Monsters walk to and pick up items they want
- * (m_search_items, mpickstuff). Not ported: fleeing, ranged
+ * have no invisibility or displacement). appr is 1 (approach) for hostiles, -1 (flee) for
+ * fleeing monsters, 0 (wander) for peacefuls and, one time in three, for bats. Monsters walk to and pick up items they want
+ * (m_search_items, mpickstuff). Not ported: ranged
  * "balking", tracking the hero's trail, tunneling, special movers, traps.
  */
 function mMove(ctx: Ctx, id: EntityId, heroPos: Pos): MoveStatus {
@@ -349,7 +351,8 @@ function mMove(ctx: Ctx, id: EntityId, heroPos: Pos): MoveStatus {
   const rules = cellRules(level, ctx.defs);
   const goal: Pos = { x: heroPos.x, y: heroPos.y };
 
-  let appr = 1;
+  // ref: m_move(): `appr = mtmp->mflee ? -1 : 1`, overridden to 0 for peacefuls and erratic bats
+  let appr = isFleeing(ctx, id) ? -1 : 1;
   if (m.peaceful || (isBatClass(def) && ctx.rng.rn2(3) === 0)) appr = 0;
 
   // ref: m_move(): hostile monsters (and peaceful ones 1 time in 10) look for items unless they
@@ -363,6 +366,15 @@ function mMove(ctx: Ctx, id: EntityId, heroPos: Pos): MoveStatus {
       // standing on something wanted: postmov() -> mpickstuff()
       mpickstuff(ctx, id);
       return 'done';
+    }
+    // ref: m_search_items() finish_search: a fleeing monster that found something to go for heads
+    // for it, unless the hero is within 3 squares (then it keeps running from her). (Found an item
+    // = the goal moved off the hero; an item on the hero's own square is not told apart.)
+    if (appr === -1 && (goal.x !== heroPos.x || goal.y !== heroPos.y)) {
+      if (distmin(pos.x, pos.y, heroPos.x, heroPos.y) <= 3) {
+        goal.x = heroPos.x;
+        goal.y = heroPos.y;
+      } else appr = 1;
     }
   }
   const ggx = goal.x;
@@ -388,7 +400,12 @@ function mMove(ctx: Ctx, id: EntityId, heroPos: Pos): MoveStatus {
     }
     const ndist = dist2(c.x, c.y, ggx, ggy);
     const nearer = ndist < nidist;
-    if ((appr === 1 && nearer) || (appr === 0 && ctx.rng.rn2(++chcnt) === 0) || chosen === null) {
+    if (
+      (appr === 1 && nearer) ||
+      (appr === -1 && !nearer) ||
+      (appr === 0 && ctx.rng.rn2(++chcnt) === 0) ||
+      chosen === null
+    ) {
       chosen = c;
       nidist = ndist;
     }
@@ -425,7 +442,8 @@ function mMove(ctx: Ctx, id: EntityId, heroPos: Pos): MoveStatus {
  * Phase one: sleeping monsters stay asleep unless disturb() wakes them. Phase three: a monster
  * that is not next to the hero, is peaceful, or (wanderers, e.g. bats) rolls 1/4, moves via
  * m_move(); one that moved does not attack in the same action. Phase four: a hostile adjacent
- * monster attacks. Not ported: fleeing/scared, confusion, invisibility, spellcasting,
+ * monster attacks. A fleeing monster always tries to move (away from the hero) and attacks only
+ * when it could not (cornered). Not ported: scared (Elbereth), confusion, invisibility, spellcasting,
  * defensive/misc item use, special per-monster behavior.
  */
 export function dochug(ctx: Ctx, id: EntityId): void {
@@ -446,11 +464,17 @@ export function dochug(ctx: Ctx, id: EntityId): void {
 
   // ref: set_apparxy(): the monster knows where the hero is
   const heroPos = { x: hp.x, y: hp.y };
+  const prevHero = m.lastHero; // where it last saw her (stands in for u.ux0/u.uy0)
   m.lastHero = heroPos;
 
   const def = ctx.defs.monster(ctx.state.entities[String(id)]?.def ?? 'nh:none');
+  // ref: src/monmove.c distfleeck(): inrange and nearby; `scared` (Elbereth, scare monster,
+  // flees_light, sanctuary) never happens here -- see DEVIATIONS.md
   const inrange = dist2(pos.x, pos.y, heroPos.x, heroPos.y) <= BOLT_LIM * BOLT_LIM;
   const nearby = inrange && monnear(def, pos.x, pos.y, heroPos.x, heroPos.y);
+  // ref: dochug(): "fleeing monsters might regain courage"
+  regainCourage(ctx, id);
+  const fleeing = isFleeing(ctx, id);
 
   // ref: dochug(): "If monster is nearby you, and has to wield a weapon, do so. This costs the
   // monster a move, of course."
@@ -464,9 +488,22 @@ export function dochug(ctx: Ctx, id: EntityId): void {
     return;
 
   let status: MoveStatus = 'nothing';
-  if (!nearby || (isWanderer(def) && ctx.rng.rn2(4) === 0) || m.peaceful) {
+  if (!nearby || fleeing || (isWanderer(def) && ctx.rng.rn2(4) === 0) || m.peaceful) {
     status = mMove(ctx, id, heroPos);
-    if (status === 'moved') return;
+    if (status === 'moved') {
+      // ref: dochug(): "Monsters can move and then shoot on same turn": an armed monster that
+      // is still not next to the hero uses its ranged attack
+      const np = ctx.state.entities[String(id)]?.c.pos;
+      if (
+        np &&
+        def.attacks.some((a) => a.at === 'weapon') &&
+        !monnear(def, np.x, np.y, heroPos.x, heroPos.y) &&
+        dist2(np.x, np.y, heroPos.x, heroPos.y) <= BOLT_LIM * BOLT_LIM &&
+        !m.peaceful
+      )
+        mattackRanged(ctx, id, sightLine(ctx, np.level), prevHero);
+      return;
+    }
   }
   // MMOVE_DONE (picked something up) means no attack this move
   if (
@@ -476,5 +513,17 @@ export function dochug(ctx: Ctx, id: EntityId): void {
     monnear(def, pos.x, pos.y, heroPos.x, heroPos.y)
   ) {
     monsterAttack(ctx, id);
+  } else if (status !== 'done' && !m.peaceful && inrange) {
+    // ref: mattacku() with range2: a weapon attack at a distance throws or shoots
+    mattackRanged(ctx, id, sightLine(ctx, pos.level), prevHero);
   }
+}
+
+/** The hero's clear-line-of-sight test on a level (couldsee), for ranged attacks. */
+function sightLine(ctx: Ctx, levelId: string) {
+  const level = ctx.state.levels[levelId];
+  if (!level) return () => false;
+  const rules = cellRules(level, ctx.defs);
+  return (x1: number, y1: number, x2: number, y2: number): boolean =>
+    clearPath(level, rules.opaque, x1, y1, x2, y2);
 }

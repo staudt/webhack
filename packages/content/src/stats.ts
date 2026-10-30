@@ -9,7 +9,7 @@ import {
   type Registry,
 } from '@nh/core';
 import { weight } from './items';
-import { P } from './props';
+import { P, hasProp } from './props';
 
 /** ref: include/you.h AC_MAX */
 const AC_MAX = 99;
@@ -66,6 +66,8 @@ export const ENCUMBRANCE_NAMES = [
 const WT_WEIGHTCAP_STRCON = 25;
 const WT_WEIGHTCAP_SPARE = 50;
 const MAX_CARR_CAP = 1000;
+/** ref: include/weight.h WT_WOUNDEDLEG_REDUCT */
+const WT_WOUNDEDLEG_REDUCT = 100;
 
 /** Strength as a 3..25 value: 18/xx and above are folded. ref: src/attrib.c acurrstr() */
 export function acurrstr(str: number): number {
@@ -82,7 +84,11 @@ export function weightCap(state: Readonly<GameState>, id: EntityId): number {
   const a = state.entities[String(id)]?.c.attributes;
   const carrcap =
     WT_WEIGHTCAP_STRCON * (acurrstr(a?.str ?? 10) + (a?.con ?? 10)) + WT_WEIGHTCAP_SPARE;
-  return Math.max(Math.min(carrcap, MAX_CARR_CAP), 1);
+  let cap = Math.min(carrcap, MAX_CARR_CAP);
+  // ref: src/hack.c weight_cap(): wounded legs reduce the capacity (WT_WOUNDEDLEG_REDUCT per leg;
+  // only the right leg is ever wounded here)
+  if (hasProp(state.entities[String(id)], P.WOUNDED_LEGS)) cap -= WT_WOUNDEDLEG_REDUCT;
+  return Math.max(cap, 1);
 }
 
 /** Weight carried minus capacity (negative when below). ref: src/hack.c inv_weight() */

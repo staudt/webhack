@@ -15,6 +15,8 @@ import {
 } from '@nh/core';
 import { hitmuAd, mdamageu } from './mhitu';
 import { monsterDied } from './mondeath';
+import { isFleeing, monflee } from './monflee';
+import { wakeup } from './peaceful';
 import { passive, type PassiveTarget } from './uhitm_passive';
 import { xnameOf } from './objnam';
 import { stopOccupation } from './eat';
@@ -189,7 +191,8 @@ function nonliving(def: MonsterDef): boolean {
  * The hero attacks the monster entity `targetId`; returns the energy cost.
  * ref: src/hack.c domove() -> src/uhitm.c do_attack() -> hitum() -> known_hitum() -> hmon().
  * The monster's passive attack answers each blow (ref: hitum() -> passive()). Not ported:
- * peaceful confirmation, knockback, two-weapon, skill training.
+ * knockback, two-weapon, skill training. (The peaceful confirmation is asked by the callers, see
+ * peaceful.ts.)
  */
 export function heroAttack(ctx: Ctx, targetId: EntityId): number {
   const hero = getPlayer(ctx.state);
@@ -226,12 +229,15 @@ export function heroAttack(ctx: Ctx, targetId: EntityId): number {
   };
 
   // ref: src/uhitm.c hitum()
-  const tmp = heroToHit(stats, def, mon, weapon, findMac(ctx.state, ctx.defs, targetId));
+  // ref: src/uhitm.c find_roll_to_hit(): +2 against a fleeing monster
+  const tmp =
+    heroToHit(stats, def, mon, weapon, findMac(ctx.state, ctx.defs, targetId)) +
+    (isFleeing(ctx, targetId) ? 2 : 0);
   const dieroll = ctx.rng.rnd(20);
   if (!(tmp > dieroll)) {
     // ref: src/uhitm.c missum(): "You miss <mon>." then wakeup(mdef, TRUE)
     ctx.emit({ type: 'msg', key: 'combat.you_miss', params: { mon: name } });
-    wakeup(mon);
+    wakeup(ctx, targetId);
     return answer(false, true);
   }
 
@@ -295,14 +301,14 @@ export function heroAttack(ctx: Ctx, targetId: EntityId): number {
     key: exclam(dmg) === '!' ? 'combat.you_hit_hard' : 'combat.you_hit',
     params: { mon: name },
   });
-  wakeup(mon);
+  // ref: src/uhitm.c known_hitum(): a hit that left it below half its hit points sometimes scares
+  // it (`!rn2(25) && mon->mhp < mon->mhpmax / 2`); hmon_hitmon_msg_hit()'s wakeup() comes first
+  wakeup(ctx, targetId);
+  if (ctx.rng.rn2(25) === 0 && hp.cur < Math.trunc(hp.max / 2)) {
+    // ref: src/uhitm.c known_hitum() (the hero's sticky hold is released inside monflee())
+    monflee(ctx, targetId, ctx.rng.rn2(3) === 0 ? ctx.rng.rnd(100) : 0, false, true);
+  }
   return answer(true, true);
-}
-
-/** ref: src/mon.c wakeup(mtmp, TRUE): wakes the monster and (setmangry) makes it hostile. */
-function wakeup(mon: { asleep: boolean; peaceful: boolean }): void {
-  mon.asleep = false;
-  mon.peaceful = false;
 }
 
 /**
