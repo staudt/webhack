@@ -26,36 +26,54 @@ export interface Chord {
   reset(): void;
 }
 
-const move = (dir: Dir): UiCommand => ({ type: 'action', action: { type: 'move', dir } });
+type Cardinal = 'n' | 's' | 'e' | 'w';
 
-/** The cardinal direction of a `move` command, or null for anything else. */
-function cardinal(cmd: UiCommand): 'n' | 's' | 'e' | 'w' | null {
-  if (cmd.type !== 'action' || cmd.action.type !== 'move') return null;
-  const d = cmd.action.dir;
+/** The direction a command carries: a `move`, or a mod action whose `args.dir` is a direction. */
+function dirOf(cmd: UiCommand): string | null {
+  if (cmd.type !== 'action') return null;
+  const a = cmd.action;
+  if (a.type === 'move') return a.dir;
+  if (a.type !== 'mod') return null;
+  const dir = (a.args as { dir?: unknown } | undefined)?.dir;
+  return typeof dir === 'string' ? dir : null;
+}
+
+/** The cardinal direction of a movement command (a move, or e.g. a run), or null otherwise. */
+function cardinal(cmd: UiCommand): Cardinal | null {
+  const d = dirOf(cmd);
   return d === 'n' || d === 's' || d === 'e' || d === 'w' ? d : null;
+}
+
+/** The same command in another direction (`cmd` must have one). */
+function withDir(cmd: UiCommand, dir: Dir): UiCommand {
+  if (cmd.type !== 'action') return cmd;
+  const a = cmd.action;
+  if (a.type === 'move') return { type: 'action', action: { type: 'move', dir } };
+  if (a.type === 'mod' && a.args && typeof a.args === 'object' && !Array.isArray(a.args))
+    return { type: 'action', action: { ...a, args: { ...a.args, dir } } };
+  return cmd;
 }
 
 const vertical = (d: string): boolean => d === 'n' || d === 's';
 
 /** Combines two perpendicular cardinals into a diagonal (n+e = ne, ...). */
-const combine = (a: 'n' | 's' | 'e' | 'w', b: 'n' | 's' | 'e' | 'w'): Dir =>
-  (vertical(a) ? a + b : b + a) as Dir;
+const combine = (a: Cardinal, b: Cardinal): Dir => (vertical(a) ? a + b : b + a) as Dir;
 
 interface Pending {
   code: string;
-  dir: 'n' | 's' | 'e' | 'w';
+  dir: Cardinal;
   cmd: UiCommand;
 }
 
 /**
- * Lets a quick pair of arrow presses make a diagonal. A fresh press waits `windowMs`
+ * Lets a quick pair of arrow presses make a diagonal (for moves, and for Shift+arrow runs). A fresh press waits `windowMs`
  * for a perpendicular partner; releasing early does not dispatch (forgiving taps).
  * Auto-repeats never wait, so a single held arrow walks at the OS repeat rate.
  */
 export function createChord(opts: ChordOptions): Chord {
   const setTimer = opts.setTimer ?? ((fn, ms) => setTimeout(fn, ms));
   const clearTimer = opts.clearTimer ?? ((h) => clearTimeout(h as ReturnType<typeof setTimeout>));
-  const held = new Map<string, 'n' | 's' | 'e' | 'w'>();
+  const held = new Map<string, Cardinal>();
   let pending: Pending | null = null;
   let timer: unknown = null;
 
@@ -69,7 +87,7 @@ export function createChord(opts: ChordOptions): Chord {
     drop();
     if (p) opts.dispatch(p.cmd);
   };
-  const heldPerpendicular = (d: 'n' | 's' | 'e' | 'w'): 'n' | 's' | 'e' | 'w' | undefined =>
+  const heldPerpendicular = (d: Cardinal): Cardinal | undefined =>
     [...held.values()].find((h) => vertical(h) !== vertical(d));
 
   return {
@@ -86,7 +104,7 @@ export function createChord(opts: ChordOptions): Chord {
       if (other) {
         // The partner may itself still be pending; the diagonal replaces it.
         if (pending && vertical(pending.dir) !== vertical(dir)) drop();
-        opts.dispatch(move(combine(dir, other)));
+        opts.dispatch(withDir(cmd, combine(dir, other)));
         return;
       }
       if (repeat) {
@@ -97,7 +115,7 @@ export function createChord(opts: ChordOptions): Chord {
         if (vertical(pending.dir) !== vertical(dir)) {
           const partner = pending.dir;
           drop();
-          opts.dispatch(move(combine(dir, partner)));
+          opts.dispatch(withDir(cmd, combine(dir, partner)));
           return;
         }
         flush();

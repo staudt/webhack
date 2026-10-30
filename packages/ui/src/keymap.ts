@@ -3,6 +3,7 @@ import type { ClientMod, Dir, UiCommand } from '@nh/core';
 export interface KeyLike {
   code: string;
   key: string;
+  shiftKey?: boolean;
 }
 
 export class Keymap {
@@ -12,8 +13,15 @@ export class Keymap {
     this.map.set(key, cmd);
   }
 
-  /** Lookup by `code` first, then by `key`. */
+  /**
+   * Lookup by `code` first, then by `key`. With Shift held, `Shift+<code>` and `Shift+<key>`
+   * bindings are tried first, so Shift+arrow can differ from the plain arrow.
+   */
   resolve(e: KeyLike): UiCommand | undefined {
+    if (e.shiftKey) {
+      const shifted = this.map.get(`Shift+${e.code}`) ?? this.map.get(`Shift+${e.key}`);
+      if (shifted) return shifted;
+    }
     return this.map.get(e.code) ?? this.map.get(e.key);
   }
 }

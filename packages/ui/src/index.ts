@@ -1,5 +1,6 @@
 export const UI_VERSION = 1;
 export { createUi } from './host';
+export { DEFAULT_DOUBLE_TAP_MS } from './host';
 export type { GameClient, UiOptions, Ui } from './host';
 export { defaultKeymap, Keymap } from './keymap';
 export { formatStr, hpLevel, an } from './status';

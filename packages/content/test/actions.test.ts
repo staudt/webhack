@@ -273,7 +273,10 @@ describe('offers', () => {
     const { q } = queryFor(['.|.', '@+.', '...']);
     expect(q.actionsFor({ kind: 'cell', pos: { x: 1, y: 1 } })).toHaveLength(1);
     expect(q.actionsFor({ kind: 'cell', pos: { x: 1, y: 0 } })).toEqual([]);
-    expect(q.actionsFor({ kind: 'cell', pos: { x: 2, y: 2 } })).toEqual([]);
+    // a far cell offers travel (and running) but never a single move
+    expect(
+      q.actionsFor({ kind: 'cell', pos: { x: 2, y: 2 } }).filter((o) => o.action.type === 'move'),
+    ).toEqual([]);
     expect(q.actionsFor({ kind: 'cell', pos: { x: 0, y: 1 } })).toEqual([]);
     expect(q.actionsFor({ kind: 'entity', id: 999 })).toEqual([]);
   });

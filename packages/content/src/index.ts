@@ -15,6 +15,7 @@ import { registerHero } from './hero';
 import { ROLES } from './roles';
 import { TERRAIN } from './terrain';
 import { TRAVEL_ACTIONS } from './travel';
+import { RUN_ACTIONS } from './run';
 import { registerGeneration } from './generation';
 import { registerMklev } from './mklev';
 import { POTION_ACTIONS, POTION_USES } from './potion';
@@ -34,6 +35,7 @@ export const vanillaMod: Mod = {
     for (const r of ROLES) api.defineRole(r);
     for (const a of ACTIONS) api.defineAction(a);
     for (const a of TRAVEL_ACTIONS) api.defineAction(a);
+    for (const a of RUN_ACTIONS) api.defineAction(a);
     for (const a of ITEM_ACTIONS) api.defineAction(a);
     for (const a of POTION_ACTIONS) api.defineAction(a);
     for (const a of READ_ACTIONS) api.defineAction(a);
@@ -61,6 +63,8 @@ export const vanillaMod: Mod = {
 export { TERRAIN, T } from './terrain';
 export { ACTIONS } from './actions';
 export { TRAVEL_ACTIONS } from './travel';
+export { RUN_ACTIONS, RUN_MODES } from './run';
+export type { RunMode } from './run';
 export { ROLES } from './roles';
 export { MONSTERS } from './monsters';
 export { BRAINS } from './brains';

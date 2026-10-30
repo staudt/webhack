@@ -29,3 +29,19 @@ test('binds inventory and item verbs to ui commands', () => {
     expect(bound[k]).toEqual({ type: 'ui', id: `pick:nh:${v}` });
   }
 });
+
+test('binds run keys: g/G prefixes and Shift+direction', async () => {
+  const { runKeys, runAction } = await import('../src/keys');
+  const bound: Record<string, UiCommand> = {};
+  runKeys.register({ bindKey: (k: string, c: UiCommand) => void (bound[k] = c) } as ClientApi);
+  expect(bound['g']).toEqual({ type: 'ui', id: 'prefix:rush' });
+  expect(bound['G']).toEqual({ type: 'ui', id: 'prefix:run' });
+  expect(bound['H']).toEqual({ type: 'action', action: runAction('w', 'shift') });
+  expect(bound['N']).toEqual({ type: 'action', action: runAction('se', 'shift') });
+  expect(bound['Shift+ArrowUp']).toEqual({ type: 'action', action: runAction('n', 'shift') });
+  expect(runAction('e', 'rush')).toEqual({
+    type: 'mod',
+    action: 'nh:run',
+    args: { dir: 'e', mode: 'rush' },
+  });
+});

@@ -10,6 +10,7 @@ import {
 } from '@nh/core';
 import { describe, expect, test } from 'vitest';
 import { T, messagesEn, vanillaMod } from '../src/index';
+import { heroAt, mapSetup, newtAt, travelTo } from './maps';
 
 const CHARS: Record<string, DefId> = {
   ' ': T.stone,
@@ -116,7 +117,7 @@ describe('nh:travel', () => {
     expect(state.turn).toBe(turn + 5); // 1 to open + 4 steps
   });
 
-  test('offers: none adjacent/own/unknown/unreachable, one for a distant cell', () => {
+  test('offers: none for own/adjacent cells, one for any other in-bounds cell', () => {
     const { engine, state } = setup(['@..|..', '...|..'], { forget: [{ x: 2, y: 1 }] });
     const q = engine.query(state);
     const offers = (x: number, y: number) =>
@@ -125,8 +126,9 @@ describe('nh:travel', () => {
         .filter((o) => o.action.type === 'mod' && o.action.action === 'nh:travel');
     expect(offers(0, 0)).toHaveLength(0);
     expect(offers(1, 1)).toHaveLength(0);
-    expect(offers(2, 1)).toHaveLength(0); // unknown
-    expect(offers(4, 0)).toHaveLength(0); // unreachable behind a wall
+    expect(offers(2, 1)).toHaveLength(1); // unknown
+    expect(offers(4, 0)).toHaveLength(1); // unreachable behind a wall
+    expect(offers(99, 0)).toHaveLength(0); // out of bounds
     const far = offers(2, 0);
     expect(far).toHaveLength(1);
     expect(far[0]?.action).toEqual(go(2, 0));
@@ -155,12 +157,12 @@ describe('nh:travel', () => {
     expect(state.entities[String(state.nextEntityId - 1)]?.c.hp?.cur).toBe(3);
   });
 
-  test('unreachable target takes no time', () => {
+  test('an unreachable target: walks to the nearest reachable point', () => {
     const { state, step } = setup(['@.|..']);
     const turn = state.turn;
     step(go(4, 0));
-    expect(posOf(state)).toEqual({ x: 0, y: 0 });
-    expect(state.turn).toBe(turn);
+    expect(posOf(state)).toEqual({ x: 1, y: 0 });
+    expect(state.turn).toBe(turn + 1);
   });
 
   test('deterministic', () => {
@@ -168,6 +170,62 @@ describe('nh:travel', () => {
       const { state, step } = setup(['.|...', '@+...', '.|...']);
       step(go(4, 1));
       return JSON.stringify(state);
+    };
+    expect(run()).toBe(run());
+  });
+});
+
+describe('nh:travel guess (findtravelpath TRAVP_GUESS)', () => {
+  test('an unexplored target past a corridor bend: goes to the explored end', () => {
+    const m = mapSetup(['@###     ', '   #     ', '   #     ', '   #     '], { memory: 'none' });
+    m.step(travelTo(8, 0));
+    expect(heroAt(m.state)).toEqual({ x: 3, y: 0 });
+  });
+
+  test('an unexplored target straight ahead in a dark corridor: walks right up to it', () => {
+    const m = mapSetup(['@#####'], { memory: 'none' });
+    m.step(travelTo(5, 0));
+    expect(heroAt(m.state)).toEqual({ x: 5, y: 0 });
+  });
+
+  test('nothing explored in that direction: one step', () => {
+    const m = mapSetup(['@#    '], { memory: 'none' });
+    const turn = m.state.turn;
+    m.step(travelTo(5, 0));
+    expect(heroAt(m.state)).toEqual({ x: 1, y: 0 });
+    expect(m.state.turn).toBe(turn + 1);
+  });
+
+  test('a known but unreachable cell: goes to the closest reachable point', () => {
+    const m = mapSetup(['@..|..', '...|..']);
+    m.step(travelTo(5, 0));
+    expect(heroAt(m.state)).toEqual({ x: 2, y: 0 });
+  });
+
+  test('blocked in the target direction: no time passes', () => {
+    const m = mapSetup(['@|', '||']);
+    const turn = m.state.turn;
+    m.step(travelTo(5, 0));
+    expect(heroAt(m.state)).toEqual({ x: 0, y: 0 });
+    expect(m.state.turn).toBe(turn);
+  });
+
+  test('a hostile monster coming into view stops guessed travel', () => {
+    const m = mapSetup(['@....#####', '..........']);
+    newtAt(m.state, 9, 1);
+    m.step({ type: 'wait' });
+    const turn = m.state.turn;
+    m.step(travelTo(9, 0));
+    // the newt was in view from the start, so it is the adjacent check that stops us
+    expect(heroAt(m.state).x).toBeLessThan(9);
+    expect(m.state.turn).toBeGreaterThan(turn);
+  });
+
+  test('deterministic', () => {
+    const run = () => {
+      const m = mapSetup(['@###     ', '   #     ', '   #     '], { memory: 'none' });
+      m.step(travelTo(8, 0));
+      return JSON.stringify(m.state);
     };
     expect(run()).toBe(run());
   });

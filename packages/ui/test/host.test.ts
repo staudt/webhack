@@ -6,6 +6,7 @@ import type {
   Description,
   DefId,
   GameEvent,
+  Dir,
   Glyph,
   PlayerAction,
   Pos,
@@ -22,6 +23,7 @@ import {
   uiMessagesEn,
   type GameClient,
   type Ui,
+  type UiOptions,
 } from '../src/index';
 
 class FakeRenderer implements Renderer {
@@ -98,12 +100,18 @@ function tap(el: Element) {
     Object.assign(new Event('pointerup', o), { clientX: 1, clientY: 1, pointerId: 1 }),
   );
 }
-const mk = (extra: { mods?: ClientMod[] } = {}) => {
+const mk = (extra: { mods?: ClientMod[]; opts?: Partial<UiOptions> } = {}) => {
   const root = document.createElement('div');
   document.body.append(root);
   const renderer = new FakeRenderer();
   const g = fakeGame();
-  const ui = createUi({ root, renderer, game: g.game, mods: extra.mods ?? [defaultKeymap] });
+  const ui = createUi({
+    root,
+    renderer,
+    game: g.game,
+    mods: extra.mods ?? [defaultKeymap],
+    ...extra.opts,
+  });
   return { root, renderer, ui, ...g };
 };
 const btns = (root: Element) =>
@@ -773,5 +781,183 @@ describe('inventory, pickers, multi-select, list', () => {
     tap(m.root.querySelector('.nh-map')!);
     await flush();
     expect(logText(m.root).at(-1)).toBe('You see: floor, a dagger, and 2 more objects.');
+  });
+});
+
+describe('run gestures', () => {
+  const runOffer = (dir: 'e' | 'w'): ActionOffer => ({
+    action: { type: 'mod', action: 'x:run', args: { dir, mode: 'rush' } },
+    labelKey: 'Run',
+    source: 't',
+  });
+  const travelOffer: ActionOffer = {
+    action: { type: 'mod', action: 'x:travel', args: { x: 20, y: 5 } },
+    labelKey: 'Travel',
+    source: 't',
+  };
+  const prefixes = {
+    rush: (dir: Dir): PlayerAction => ({
+      type: 'mod',
+      action: 'x:run',
+      args: { dir, mode: 'rush' },
+    }),
+    run: (dir: Dir): PlayerAction => ({ type: 'mod', action: 'x:run', args: { dir, mode: 'run' } }),
+  };
+  const gestures = { doubleTap: { action: 'x:run' }, prefixes };
+  let now = 1000;
+  const setup = () => {
+    now = 1000;
+    vi.spyOn(Date, 'now').mockImplementation(() => now);
+    const m = mk({ opts: gestures });
+    ui = m.ui;
+    m.ui.update(view(5, 5), [], null);
+    m.renderer.cell = { x: 20, y: 5 };
+    m.state.offers = [travelOffer, runOffer('e')];
+    return m;
+  };
+  const mapOf = (m: { root: Element }) => m.root.querySelector('.nh-map') as Element;
+
+  test('the first tap acts at once; the run offer is not used for a single tap', async () => {
+    const m = setup();
+    tap(mapOf(m));
+    await flush();
+    expect(m.acts).toEqual([travelOffer.action]);
+  });
+
+  test('a second tap within the window runs instead', async () => {
+    const m = setup();
+    tap(mapOf(m));
+    await flush();
+    now += 300;
+    tap(mapOf(m));
+    await flush();
+    expect(m.acts).toEqual([travelOffer.action, runOffer('e').action]);
+    // the double tap is spent: a third quick tap is a plain tap again
+    now += 100;
+    tap(mapOf(m));
+    await flush();
+    expect(m.acts[2]).toEqual(travelOffer.action);
+  });
+
+  test('a slow second tap is just another tap', async () => {
+    const m = setup();
+    tap(mapOf(m));
+    await flush();
+    now += 400;
+    tap(mapOf(m));
+    await flush();
+    expect(m.acts).toEqual([travelOffer.action, travelOffer.action]);
+  });
+
+  test('a second tap far from the first is not a double tap', async () => {
+    const m = setup();
+    tap(mapOf(m));
+    await flush();
+    now += 100;
+    m.renderer.cell = { x: 2, y: 9 };
+    tap(mapOf(m));
+    await flush();
+    expect(m.acts).toEqual([travelOffer.action, travelOffer.action]);
+  });
+
+  test('a double tap with no run offer falls back to the normal tap', async () => {
+    const m = setup();
+    m.state.offers = [travelOffer];
+    tap(mapOf(m));
+    await flush();
+    now += 100;
+    tap(mapOf(m));
+    await flush();
+    expect(m.acts).toEqual([travelOffer.action, travelOffer.action]);
+  });
+
+  test('a double tap that lands on the hero opens no menu', async () => {
+    const m = setup();
+    tap(mapOf(m));
+    await flush();
+    m.ui.update(view(20, 5), [], null); // travel brought her there
+    now += 100;
+    tap(mapOf(m));
+    await flush();
+    expect(m.root.querySelector('.nh-sheet')).toBeNull();
+    expect(m.acts).toHaveLength(1);
+  });
+
+  test('without the option there is no double tap', async () => {
+    const m = mk();
+    ui = m.ui;
+    m.ui.update(view(5, 5), [], null);
+    m.renderer.cell = { x: 20, y: 5 };
+    m.state.offers = [travelOffer, runOffer('e')];
+    tap(mapOf(m));
+    await flush();
+    expect(m.root.querySelector('.nh-sheet')).not.toBeNull(); // two offers: a menu
+  });
+
+  const runMod: ClientMod = {
+    id: 'test-run',
+    version: '1',
+    register(api) {
+      api.bindKey('g', { type: 'ui', id: 'prefix:rush' });
+      api.bindKey('G', { type: 'ui', id: 'prefix:run' });
+      api.bindKey('Shift+ArrowUp', { type: 'action', action: prefixes.rush('n') });
+      api.bindKey('Shift+ArrowRight', { type: 'action', action: prefixes.rush('e') });
+      api.bindKey('L', { type: 'action', action: prefixes.run('e') });
+    },
+  };
+
+  test('Shift+arrow and Shift+letter run; Shift+arrows still chord into a diagonal', () => {
+    vi.useFakeTimers();
+    try {
+      const m = mk({ mods: [defaultKeymap, runMod], opts: gestures });
+      ui = m.ui;
+      key('L', 'KeyL', { shiftKey: true });
+      key('ArrowUp', 'ArrowUp', { shiftKey: true });
+      vi.advanceTimersByTime(200);
+      keyUp('ArrowUp');
+      key('ArrowUp', 'ArrowUp', { shiftKey: true });
+      key('ArrowRight', 'ArrowRight', { shiftKey: true });
+      vi.advanceTimersByTime(200);
+      keyUp('ArrowUp');
+      keyUp('ArrowRight');
+      key('ArrowUp', 'ArrowUp'); // without Shift it is still a plain move
+      vi.advanceTimersByTime(200);
+      expect(m.acts).toEqual([
+        prefixes.run('e'),
+        prefixes.rush('n'),
+        prefixes.rush('ne'),
+        { type: 'move', dir: 'n' },
+      ]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test('g and G prefixes run in the next direction key', () => {
+    const m = mk({ mods: [defaultKeymap, runMod], opts: gestures });
+    ui = m.ui;
+    key('g', 'KeyG');
+    key('l', 'KeyL');
+    key('G', 'KeyG', { shiftKey: true });
+    key('ArrowUp', 'ArrowUp');
+    expect(m.acts).toEqual([
+      { type: 'mod', action: 'x:run', args: { dir: 'e', mode: 'rush' } },
+      { type: 'mod', action: 'x:run', args: { dir: 'n', mode: 'run' } },
+    ]);
+  });
+
+  test('a prefix is cancelled by Escape or a non-direction key', () => {
+    const m = mk({ mods: [defaultKeymap, runMod], opts: gestures });
+    ui = m.ui;
+    key('g', 'KeyG');
+    key('Escape', 'Escape');
+    key('l', 'KeyL');
+    key('g', 'KeyG');
+    key('Shift', 'ShiftLeft', { shiftKey: true }); // a modifier alone keeps it armed
+    key('k', 'KeyK');
+    expect(m.acts).toEqual([
+      { type: 'move', dir: 'e' },
+      { type: 'mod', action: 'x:run', args: { dir: 'n', mode: 'rush' } },
+    ]);
   });
 });

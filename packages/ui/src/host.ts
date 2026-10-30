@@ -3,6 +3,7 @@ import type {
   ClientApi,
   ClientMod,
   Description,
+  Dir,
   GameEvent,
   Glyph,
   MenuItem,
@@ -28,6 +29,9 @@ import { createMessageLog } from './messageLog';
 import { injectStyles } from './styles';
 import { an, ripArt, statusLines } from './status';
 
+/** Window for a double tap on the map, in ms. */
+export const DEFAULT_DOUBLE_TAP_MS = 350;
+
 export interface GameClient {
   act(action: PlayerAction): void;
   query: AsyncCoreQuery;
@@ -43,6 +47,18 @@ export interface UiOptions {
   chordWindowMs?: number;
   /** Called by the tombstone's New game button; falls back to the menu item with id 'new'. */
   onNewGame?: () => void;
+  /**
+   * Double-tap gesture on the map. The first tap acts at once; a second tap within `windowMs`
+   * (default 350) of the first, on the same cell or next to it, performs the offer whose mod
+   * action id is `action` among the cell's `actionsFor` offers (the game decides what it does,
+   * e.g. a run). Offers with that id are never used for a single tap.
+   */
+  doubleTap?: { action: string; windowMs?: number };
+  /**
+   * Direction prefixes such as NetHack's `g` and `G`. A key bound to the ui command
+   * `prefix:<name>` arms the prefix; the next direction key then performs `prefixes[name](dir)`.
+   */
+  prefixes?: Record<string, (dir: Dir) => PlayerAction>;
 }
 
 export interface Ui {
@@ -109,6 +125,8 @@ export function createUi(opts: UiOptions): Ui {
 
   // Assigned once runCommand exists; showModal only runs after that.
   let chordReset = (): void => {};
+  /** The armed direction prefix (see UiOptions.prefixes), if any. */
+  let prefix: string | null = null;
 
   const closeModal = (): void => {
     const m = modal;
@@ -120,6 +138,7 @@ export function createUi(opts: UiOptions): Ui {
   const showSheet = (make: (onClose: () => void) => OpenMenu): OpenMenu => {
     closeModal();
     chordReset();
+    prefix = null;
     const m: OpenMenu = make(() => {
       if (modal === m) {
         modal = null;
@@ -325,6 +344,12 @@ export function createUi(opts: UiOptions): Ui {
     });
   };
 
+  const gestureAction = opts.doubleTap?.action;
+  const doubleTapMs = opts.doubleTap?.windowMs ?? DEFAULT_DOUBLE_TAP_MS;
+  const isGesture = (o: ActionOffer): boolean =>
+    gestureAction !== undefined && o.action.type === 'mod' && o.action.action === gestureAction;
+  let lastTap: { at: number; pos: Pos } | null = null;
+
   const onTap = (x: number, y: number): void => {
     if (modal) return;
     const pos = renderer.cellAt(x, y);
@@ -333,16 +358,35 @@ export function createUi(opts: UiOptions): Ui {
     if (wasLook) setLook(false);
     const p = playerPos;
     const dist = p ? Math.max(Math.abs(pos.x - p.x), Math.abs(pos.y - p.y)) : Infinity;
+    // A second tap soon after the first, on the same cell: the first already acted.
+    const at = Date.now();
+    const prev = lastTap;
+    const double =
+      !wasLook &&
+      gestureAction !== undefined &&
+      prev !== null &&
+      at - prev.at <= doubleTapMs &&
+      Math.max(Math.abs(pos.x - prev.pos.x), Math.abs(pos.y - prev.pos.y)) <= 1;
+    lastTap = wasLook || double ? null : { at, pos };
     if (!wasLook && dist === 0) {
-      openActions({ kind: 'self' });
+      // Not a menu after a double tap that has already brought the hero to this cell.
+      if (!double) openActions({ kind: 'self' });
     } else if (wasLook) {
       describe(pos);
     } else {
       void game.query.actionsFor({ kind: 'cell', pos }).then((offers) => {
         if (destroyed) return;
-        const [first] = offers;
-        if (offers.length === 1 && first) game.act(first.action);
-        else if (offers.length > 1) showModal(t('ui.actions'), offerEntries(offers), true);
+        if (double) {
+          const gesture = offers.find(isGesture);
+          if (gesture) {
+            game.act(gesture.action);
+            return;
+          }
+        }
+        const tapOffers = offers.filter((o) => !isGesture(o));
+        const [first] = tapOffers;
+        if (tapOffers.length === 1 && first) game.act(first.action);
+        else if (tapOffers.length > 1) showModal(t('ui.actions'), offerEntries(offers), true);
         else describe(pos);
       });
     }
@@ -384,7 +428,22 @@ export function createUi(opts: UiOptions): Ui {
   const detachKeys = attachKeys(doc, (e) => {
     if (modal) return modal.onKey(e);
     const cmd = keymap.resolve(e);
+    if (prefix !== null) {
+      // The key after a prefix: a direction completes it; anything else cancels it.
+      const make = opts.prefixes?.[prefix];
+      if (!cmd && e.key !== 'Escape') return false; // Shift alone, etc.
+      prefix = null;
+      chord.reset();
+      if (make && cmd?.type === 'action' && cmd.action.type === 'move') {
+        game.act(make(cmd.action.dir));
+      }
+      return true;
+    }
     if (!cmd) return false;
+    if (cmd.type === 'ui' && cmd.id.startsWith('prefix:')) {
+      prefix = cmd.id.slice(7);
+      return true;
+    }
     if (ARROW_CODES.has(e.code)) {
       chord.down(e.code, e.repeat, cmd);
       return true;
