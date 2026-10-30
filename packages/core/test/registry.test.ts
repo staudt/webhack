@@ -343,8 +343,10 @@ describe('terrain field validation', () => {
     expect(t({ opaque: undefined })).toEqual([issue('opaque', 'must be a boolean')]);
   });
   test('door', () => {
-    expect(t({ door: 'ajar' })).toEqual([issue('door', "must be 'closed', 'open' or 'doorway'")]);
-    for (const d of ['closed', 'open', 'doorway'])
+    expect(t({ door: 'ajar' })).toEqual([
+      issue('door', "must be 'closed', 'locked', 'open' or 'doorway'"),
+    ]);
+    for (const d of ['closed', 'locked', 'open', 'doorway'])
       expect(() =>
         loadMods([mod('m', (api) => api.defineTerrain(terrain('m', 'x', { door: d })))]),
       ).not.toThrow();

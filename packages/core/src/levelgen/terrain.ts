@@ -25,6 +25,11 @@ export interface LevelTerrain {
   sdoor_h: DefId;
   /** Secret corridor; looks like stone until found by searching. */
   scorr: DefId;
+  /** Locked door (ref: rm.h D_LOCKED). */
+  door_locked: DefId;
+  /** Locked secret doors: once found they become locked doors. */
+  sdoor_locked_v: DefId;
+  sdoor_locked_h: DefId;
 }
 
 export const VANILLA_TERRAIN: LevelTerrain = {
@@ -46,6 +51,9 @@ export const VANILLA_TERRAIN: LevelTerrain = {
   sdoor_v: 'nh:sdoor_v',
   sdoor_h: 'nh:sdoor_h',
   scorr: 'nh:scorr',
+  door_locked: 'nh:door_locked',
+  sdoor_locked_v: 'nh:sdoor_locked_v',
+  sdoor_locked_h: 'nh:sdoor_locked_h',
 };
 
 /** Palette order (indices into Level.palette). */
@@ -68,6 +76,9 @@ export const PALETTE_KEYS: readonly (keyof LevelTerrain)[] = [
   'sdoor_v',
   'sdoor_h',
   'scorr',
+  'door_locked',
+  'sdoor_locked_v',
+  'sdoor_locked_h',
 ];
 
 /** Palette indices by key, for readers of generated levels. */
@@ -90,4 +101,7 @@ export const PAL = {
   sdoor_v: 15,
   sdoor_h: 16,
   scorr: 17,
+  door_locked: 18,
+  sdoor_locked_v: 19,
+  sdoor_locked_h: 20,
 } as const;

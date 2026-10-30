@@ -3,7 +3,8 @@ import type { Level } from './types/level';
 import type { CellRules } from './movement';
 
 /**
- * Cells the hero at `from` can see: in line of sight AND (lit OR adjacent).
+ * Cells the hero at `from` can see: in line of sight AND (adjacent OR lit), where a lit wall or
+ * closed door also needs its neighbor toward the hero to be lit.
  * ref: src/vision.c vision_recalc() -- a position is IN_SIGHT if COULD_SEE and
  * (lev->lit || TEMP_LIT), or if it is next to the hero (night vision radius 1,
  * "We see this position because of night- or xray-vision").
@@ -67,13 +68,23 @@ export function computeVisible(level: Level, rules: CellRules, from: Pos): numbe
   const lit = level.lit;
   for (let i = 0; i < n; i++) {
     if (los[i] !== 1) continue;
-    if (lit[i] === 1) {
+    const x = i % width;
+    const y = (i - x) / width;
+    // Night vision: the hero always sees the cells next to her.
+    if (Math.abs(x - ox) <= 1 && Math.abs(y - oy) <= 1) {
       out.push(i);
       continue;
     }
-    const x = i % width;
-    const y = (i - x) / width;
-    if (Math.abs(x - ox) <= 1 && Math.abs(y - oy) <= 1) out.push(i);
+    if (lit[i] !== 1) continue;
+    // ref: vision_recalc() "Make sure doors, walls, boulders or mimics don't show up at the end
+    // of dark hallways": a lit cell that blocks sight is seen only if the cell next to it,
+    // one step toward the hero, is lit too.
+    if (opaque[cells[i] ?? 0] === true) {
+      const nx = x + Math.sign(ox - x);
+      const ny = y + Math.sign(oy - y);
+      if (lit[ny * width + nx] !== 1) continue;
+    }
+    out.push(i);
   }
   return out;
 }

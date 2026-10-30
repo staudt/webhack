@@ -785,17 +785,7 @@ describe('inventory, pickers, multi-select, list', () => {
   });
 });
 
-describe('run gestures', () => {
-  const runOffer = (dir: 'e' | 'w'): ActionOffer => ({
-    action: { type: 'mod', action: 'x:run', args: { dir, mode: 'rush' } },
-    labelKey: 'Run',
-    source: 't',
-  });
-  const travelOffer: ActionOffer = {
-    action: { type: 'mod', action: 'x:travel', args: { x: 20, y: 5 } },
-    labelKey: 'Travel',
-    source: 't',
-  };
+describe('run prefixes', () => {
   const prefixes = {
     rush: (dir: Dir): PlayerAction => ({
       type: 'mod',
@@ -804,97 +794,7 @@ describe('run gestures', () => {
     }),
     run: (dir: Dir): PlayerAction => ({ type: 'mod', action: 'x:run', args: { dir, mode: 'run' } }),
   };
-  const gestures = { doubleTap: { action: 'x:run' }, prefixes };
-  let now = 1000;
-  const setup = () => {
-    now = 1000;
-    vi.spyOn(Date, 'now').mockImplementation(() => now);
-    const m = mk({ opts: gestures });
-    ui = m.ui;
-    m.ui.update(view(5, 5), [], null);
-    m.renderer.cell = { x: 20, y: 5 };
-    m.state.offers = [travelOffer, runOffer('e')];
-    return m;
-  };
-  const mapOf = (m: { root: Element }) => m.root.querySelector('.nh-map') as Element;
-
-  test('the first tap acts at once; the run offer is not used for a single tap', async () => {
-    const m = setup();
-    tap(mapOf(m));
-    await flush();
-    expect(m.acts).toEqual([travelOffer.action]);
-  });
-
-  test('a second tap within the window runs instead', async () => {
-    const m = setup();
-    tap(mapOf(m));
-    await flush();
-    now += 300;
-    tap(mapOf(m));
-    await flush();
-    expect(m.acts).toEqual([travelOffer.action, runOffer('e').action]);
-    // the double tap is spent: a third quick tap is a plain tap again
-    now += 100;
-    tap(mapOf(m));
-    await flush();
-    expect(m.acts[2]).toEqual(travelOffer.action);
-  });
-
-  test('a slow second tap is just another tap', async () => {
-    const m = setup();
-    tap(mapOf(m));
-    await flush();
-    now += 400;
-    tap(mapOf(m));
-    await flush();
-    expect(m.acts).toEqual([travelOffer.action, travelOffer.action]);
-  });
-
-  test('a second tap far from the first is not a double tap', async () => {
-    const m = setup();
-    tap(mapOf(m));
-    await flush();
-    now += 100;
-    m.renderer.cell = { x: 2, y: 9 };
-    tap(mapOf(m));
-    await flush();
-    expect(m.acts).toEqual([travelOffer.action, travelOffer.action]);
-  });
-
-  test('a double tap with no run offer falls back to the normal tap', async () => {
-    const m = setup();
-    m.state.offers = [travelOffer];
-    tap(mapOf(m));
-    await flush();
-    now += 100;
-    tap(mapOf(m));
-    await flush();
-    expect(m.acts).toEqual([travelOffer.action, travelOffer.action]);
-  });
-
-  test('a double tap that lands on the hero opens no menu', async () => {
-    const m = setup();
-    tap(mapOf(m));
-    await flush();
-    m.ui.update(view(20, 5), [], null); // travel brought her there
-    now += 100;
-    tap(mapOf(m));
-    await flush();
-    expect(m.root.querySelector('.nh-sheet')).toBeNull();
-    expect(m.acts).toHaveLength(1);
-  });
-
-  test('without the option there is no double tap', async () => {
-    const m = mk();
-    ui = m.ui;
-    m.ui.update(view(5, 5), [], null);
-    m.renderer.cell = { x: 20, y: 5 };
-    m.state.offers = [travelOffer, runOffer('e')];
-    tap(mapOf(m));
-    await flush();
-    expect(m.root.querySelector('.nh-sheet')).not.toBeNull(); // two offers: a menu
-  });
-
+  const gestures = { prefixes };
   const runMod: ClientMod = {
     id: 'test-run',
     version: '1',
@@ -1020,18 +920,13 @@ describe('multi-turn actions in the UI', () => {
     labelKey: 'Travel',
     source: 't',
   };
-  const runOffer: ActionOffer = {
-    action: { type: 'mod', action: 'x:run', args: { dir: 'e', mode: 'rush' } },
-    labelKey: 'Run',
-    source: 't',
-  };
   const setup = (opts: Partial<UiOptions> = {}) => {
     vi.useFakeTimers();
-    const m = mk({ opts: { doubleTap: { action: 'x:run' }, ...opts } });
+    const m = mk({ opts });
     ui = m.ui;
     m.ui.update(view(5, 5), [], null);
     m.renderer.cell = { x: 20, y: 5 };
-    m.state.offers = [travelOffer, runOffer];
+    m.state.offers = [travelOffer];
     return m;
   };
   afterEach(() => vi.useRealTimers());
@@ -1126,20 +1021,6 @@ describe('multi-turn actions in the UI', () => {
     m.ui.update(view(), [], null, true);
     vi.advanceTimersByTime(DEFAULT_STEP_DELAY_MS);
     expect(m.acts).toEqual([CONT, CONT]);
-  });
-
-  test('the second tap of a double tap during a continuing travel starts the run', async () => {
-    const m = setup();
-    tap(mapOf(m));
-    await vi.advanceTimersByTimeAsync(0);
-    expect(m.acts).toEqual([travelOffer.action]);
-    m.ui.update(view(), [], null, true); // the travel is continuing
-    await vi.advanceTimersByTimeAsync(20);
-    tap(mapOf(m));
-    await vi.advanceTimersByTimeAsync(0);
-    expect(m.acts).toEqual([travelOffer.action, runOffer.action]);
-    await vi.advanceTimersByTimeAsync(1000);
-    expect(m.acts).toHaveLength(2); // no continue for the replaced travel
   });
 
   test('a prompt stops continuing', () => {

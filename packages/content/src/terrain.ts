@@ -108,6 +108,16 @@ export const TERRAIN: readonly TerrainDef[] = [
     door: 'closed',
     glyph: { ch: '+', fg: BROWN },
   },
+  // A locked door looks like any closed door (ref: defsym.h S_vcdoor/S_hcdoor, rm.h D_LOCKED).
+  {
+    id: 'nh:door_locked',
+    nameKey: 'terrain.door_closed',
+    passable: false,
+    opaque: true,
+    door: 'locked',
+    glyph: { ch: '+', fg: BROWN },
+    looksLike: 'nh:door_closed',
+  },
   // ref: defsym.h S_upstair '<' (CLR_GRAY)
   {
     id: 'nh:stairs_up',
@@ -137,6 +147,23 @@ export const TERRAIN: readonly TerrainDef[] = [
   },
   {
     id: 'nh:sdoor_h',
+    nameKey: 'terrain.wall',
+    passable: false,
+    opaque: true,
+    glyph: { ch: '-', fg: GRAY },
+    looksLike: 'nh:hwall',
+  },
+  // Locked secret doors (ref: mklev.c dosdoor() SDOOR branch, doormask D_LOCKED).
+  {
+    id: 'nh:sdoor_locked_v',
+    nameKey: 'terrain.wall',
+    passable: false,
+    opaque: true,
+    glyph: { ch: '|', fg: GRAY },
+    looksLike: 'nh:vwall',
+  },
+  {
+    id: 'nh:sdoor_locked_h',
     nameKey: 'terrain.wall',
     passable: false,
     opaque: true,
@@ -173,4 +200,7 @@ export const T = {
   sdoor_v: 'nh:sdoor_v',
   sdoor_h: 'nh:sdoor_h',
   scorr: 'nh:scorr',
+  door_locked: 'nh:door_locked',
+  sdoor_locked_v: 'nh:sdoor_locked_v',
+  sdoor_locked_h: 'nh:sdoor_locked_h',
 } as const;

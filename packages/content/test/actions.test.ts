@@ -20,6 +20,7 @@ const CHARS: Record<string, DefId> = {
   '-': T.hwall,
   '.': T.floor,
   '+': T.door_closed,
+  X: T.door_locked,
   o: T.door_open_v,
   O: T.door_open_h,
   d: T.doorway,
@@ -157,6 +158,17 @@ describe('nh:move', () => {
     expect(posOf(state)).toEqual({ x: 1, y: 1 });
   });
 
+  test('a locked door says so, takes no time and stays locked', () => {
+    const { state, step } = setup(['.|.', '@X.', '.|.']);
+    const turn = state.turn;
+    const ev = step({ type: 'move', dir: 'e' });
+    expect(ev).toEqual([{ type: 'msg', key: 'door.locked' }]);
+    expect(state.turn).toBe(turn);
+    expect(terrainAt(state, 1, 1)).toBe(T.door_locked);
+    expect(posOf(state)).toEqual({ x: 0, y: 1 });
+    expect(messagesEn['door.locked']).toBe('This door is locked.');
+  });
+
   test('closed door in a horizontal wall opens as door_open_h', () => {
     const { state, step } = setup(['.@.', '-+-', '...']);
     step({ type: 'move', dir: 's' });
@@ -213,10 +225,11 @@ describe('offers', () => {
 
   test('self offers wait and search with source nh', () => {
     const { q } = queryFor(['@']);
-    // plus the item actions that apply anywhere: drop several (the kit) and discoveries
+    // plus run (asks a direction) and the item actions that apply anywhere: drop several (the kit) and discoveries
     expect(q.actionsFor({ kind: 'self' })).toEqual([
       { action: { type: 'wait' }, labelKey: 'action.wait', source: 'nh' },
       { action: { type: 'search' }, labelKey: 'action.search', source: 'nh' },
+      { action: { type: 'mod', action: 'nh:run' }, labelKey: 'action.run', source: 'nh' },
       {
         action: { type: 'mod', action: 'nh:drop_many' },
         labelKey: 'action.nh:drop_many',

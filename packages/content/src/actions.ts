@@ -112,6 +112,11 @@ const move: ActionDef = {
         ctx.emit({ type: 'msg', key: 'door.opens' });
         return NORMAL_SPEED;
       }
+      case 'lockedDoor': {
+        // ref: src/hack.c test_move() closed_door(): locked, so no time passes
+        ctx.emit({ type: 'msg', key: 'door.locked' });
+        return 0;
+      }
       case 'blocked':
       case 'diagonalDoor': {
         // ref: src/hack.c domove() context.move = 0; nothing is printed without mention_walls
@@ -167,10 +172,11 @@ const search: ActionDef = {
       for (let y = here.y - 1; y <= here.y + 1; y++) {
         if (!inBounds(level, x, y) || (x === here.x && y === here.y)) continue;
         const id = level.palette[level.cells[cellIndex(level, x, y)] ?? 0];
-        if (id === T.sdoor_v || id === T.sdoor_h) {
+        const locked = id === T.sdoor_locked_v || id === T.sdoor_locked_h;
+        if (id === T.sdoor_v || id === T.sdoor_h || locked) {
           if (rnl(ctx.rng, 7) !== 0) continue;
-          // ref: cvt_sdoor_to_door(): a closed door (locked doors are closed in this port)
-          setTerrain(level, x, y, T.door_closed);
+          // ref: cvt_sdoor_to_door(): the door keeps its doormask (closed or locked)
+          setTerrain(level, x, y, locked ? T.door_locked : T.door_closed);
           ctx.emit({ type: 'msg', key: 'search.found_door' });
         } else if (id === T.scorr) {
           if (rnl(ctx.rng, 7) !== 0) continue;

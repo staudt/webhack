@@ -204,6 +204,8 @@ export function mfndpos(
       const closed = rules.closedDoor[to] === true;
       if (!rules.passable[to] && !closed) continue;
       if (closed && !canOpen) continue;
+      // ref: mfndpos() UNLOCKDOOR/BUSTDOOR: none of our monsters carry keys or bust doors
+      if (rules.lockedDoor[to]) continue;
       const diagonal = nx !== pos.x && ny !== pos.y;
       // ref: mfndpos() "first diagonal checks": no diagonal moves into or out of an intact door
       if (diagonal && (rules.intactDoor[here] || rules.intactDoor[to])) continue;

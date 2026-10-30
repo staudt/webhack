@@ -8,10 +8,10 @@ import { addItem, heroPos, objectsMod } from './helpers/objectMods';
 const engine = createEngine([terrainMod(), actionsMod(), objectsMod()]);
 
 describe('save with items', () => {
-  test('new game is version 4 with empty object state', () => {
+  test('new game is version 5 with empty object state', () => {
     const { state } = engine.newGame({ seed: 3, width: 40, height: 15 });
-    expect(SAVE_VERSION).toBe(4);
-    expect(state.version).toBe(4);
+    expect(SAVE_VERSION).toBe(5);
+    expect(state.version).toBe(5);
     // refreshVision creates the current level's (empty) entry.
     expect(state.objectMemory).toEqual({ dlvl1: {} });
     expect(state.appearances).toEqual({});

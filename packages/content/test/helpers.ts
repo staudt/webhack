@@ -16,6 +16,7 @@ const CHARS: Record<string, DefId> = {
   '-': T.hwall,
   '.': T.floor,
   '+': T.door_closed,
+  X: T.door_locked,
   o: T.doorway,
 };
 

@@ -348,6 +348,9 @@ describe('monster attacks', () => {
     let hit = false;
     for (let seed = 1; seed < 30 && !hit; seed++) {
       const s = setup(seed);
+      // No natural regeneration, so the end-of-turn heal can't hide the bite's damage.
+      if (s.hero.c.attributes) s.hero.c.attributes.con = 0;
+      if (s.hero.c.experience) s.hero.c.experience.level = 0;
       const hp0 = s.hero.c.hp?.cur ?? 0;
       target.id = spawn(s.state, 'nh:jackal', { x: 4, y: 2 });
       const r = s.engine.step(s.state, bite);

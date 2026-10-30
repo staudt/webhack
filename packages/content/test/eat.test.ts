@@ -464,7 +464,7 @@ describe('corpses', () => {
   });
 
   test('a fresh newt corpse is safe, takes 3 turns and feeds 20', () => {
-    const s = fresh();
+    const s = fresh(2); // a seed without the 1-in-7 'Blecch! Rotten food!' roll (ref: eat.c eatcorpse)
     heroHunger(s).nutrition = 100;
     const c = s.carry('nh:corpse', { corpseOf: 'nh:newt' });
     const t0 = s.state.turn;

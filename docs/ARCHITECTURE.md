@@ -38,7 +38,7 @@ interface ModRef {
 }
 
 interface GameState {
-  version: 4;
+  version: 5;
   seed: number;
   turn: number;
   nextEntityId: number;
@@ -51,6 +51,7 @@ interface GameState {
   playerId: EntityId;
   memory: Record<LevelId, number[]>; // remembered palette index per cell, -1 = never seen
   objectMemory: Record<LevelId, Record<string, DefId>>; // cell index -> remembered top object (shown id)
+  monsterMemory: Record<LevelId, Record<string, DefId>>; // cell index -> monster def last seen there; set/cleared by refreshVision for visible cells
   appearances: Record<DefId, DefId>; // object def -> appearance def, shuffled per game
   discovered: DefId[]; // object defs the hero has identified, sorted
   visible: number[]; // sorted cell indices visible to the player now
@@ -77,7 +78,10 @@ interface Components {
   item?: ItemComponent;
   hunger?: { nutrition: number; state: HungerState }; // u.uhunger, u.uhs
   helpless?: { until: number; reasonKey: string }; // nomul() with negative multi
+  props?: Record<string, PropState>; // intrinsic and timed properties (ref: prop.h); keys are content-defined, e.g. 'cold_res', 'stunned'
 }
+// timeout is the turn the property ends; 0 means none (permanent if intrinsic)
+interface PropState { intrinsic: boolean; timeout: number }
 // ref: include/obj.h struct obj. An item is in exactly one place: the floor (`pos`) or carried.
 interface ItemComponent {
   quantity: number;
@@ -113,6 +117,12 @@ interface Level {
 ```
 
 The state is JSON-plain: saving is `JSON.stringify`, and `stateHash(state)` is a hash of canonical (key-sorted) JSON. The level size is a parameter, and 80×21 is only the default.
+
+**Terrain rules.** `cellRules(level, registry)` flattens the palette into per-cell flag arrays: `passable`, `opaque`, `closedDoor` (closed *or* locked, so travel paths go through doors as `test_move` does for `TEST_TRAV`), `lockedDoor` (locked only) and `intactDoor` (doors that block diagonal moves). `checkStep` returns `ok` or a reason: `bounds`, `blocked`, `closedDoor`, `lockedDoor` or `diagonalDoor`. `lockedDoor` is checked before `closedDoor`; content turns it into "This door is locked." with no time passing. Levelgen draws NetHack's exact `dodoor`/`dosdoor` rolls and so makes locked doors (about 1/3 * 4/5 * 1/6 of doors) and locked secret doors (1 in 5 below depth 2); trapped doors are not made, though their rolls are still drawn.
+
+**Vision.** A cell is seen when it is in line of sight and either adjacent to the hero or lit. A lit cell that blocks sight (a wall or closed door) is seen from afar only if its neighbor one step toward the hero is also lit, which hides lit room walls at the end of dark corridors (ref: src/vision.c vision_recalc()).
+
+**Monster memory.** `refreshVision` updates `monsterMemory` for the cells now visible: a live monster there is recorded, an empty cell is cleared. Cells out of view keep their entry, so a monster glyph stays where it was last seen until that cell is seen again. The snapshot exposes it as `ViewCell.m` on cells that are not visible, and live monsters stay in `entities` only, never duplicated as `m`. Deltas include `m` changes.
 
 ## Randomness
 
@@ -151,11 +161,12 @@ type GameEvent =
 
 interface Prompt {
   id: string;
-  kind: 'yn' | 'direction' | 'menu';
+  kind: 'yn' | 'direction' | 'menu' | 'text'; // 'text' is answered with a string of at most maxLength characters (null cancels)
   key: string;
   params?: Params;
-  options?: { value: Json; key: string; params?: Params; glyph?: DefId }[];
-  multi?: boolean; // menus only: the answer is the array of chosen values ([] = none)
+  options?: { value: Json; key: string; params?: Params; glyph?: DefId; max?: number }[]; // max: a count 1..max may be chosen (a stack size)
+  multi?: boolean; // menus only: the answer is the array of chosen values ([] = none); an option with max may be answered as { value, count }
+  maxLength?: number; // text prompts: the longest accepted answer
 }
 ```
 
@@ -210,7 +221,7 @@ interface TerrainDef {
   nameKey: string;
   passable: boolean;
   opaque: boolean;
-  door?: 'closed' | 'open' | 'doorway';
+  door?: 'closed' | 'locked' | 'open' | 'doorway'; // locked is a closed door that does not open (ref: rm.h D_LOCKED)
   stairs?: 'up' | 'down';
   glyph: { ch: string; fg: string };
 }
@@ -238,17 +249,18 @@ interface MonsterDef {
   size: 'tiny' | 'small' | 'medium' | 'large' | 'huge' | 'gigantic';
   flags: string[]; frequency: number; group: 'small' | 'large' | null; genFlags: string[];
   difficulty: number;
+  resists: string[]; conveys: string[]; // mresists / mconveys, lowercased MR_ names: 'fire', 'cold', 'sleep', 'disint', 'elec', 'poison', 'acid', 'stone'
   weight: number; nutrition: number; // corpse cwt / cnutrit
   brain: DefId; // must name a registered BrainDef (checked after all mods load)
 }
 interface ObjectDef {
   // ref: include/objclass.h struct objclass
-  id: DefId; nameKey: string; class: 'weapon' | 'armor' | 'food' | 'potion' | 'scroll' | 'coin';
+  id: DefId; nameKey: string; class: 'weapon' | 'armor' | 'food' | 'potion' | 'scroll' | 'coin' | 'gem';
   glyph: { ch: string; fg: string };
   descKey?: string; // fixed unidentified description; shuffled classes use appearances instead
   prob: number; weight: number; cost: number; material: string;
   merge: boolean; magic: boolean; delay: number;
-  weapon?: { small: Dice; large: Dice; hitBonus: number; skill: string; bimanual: boolean; kind: 'pierce' | 'slash' | 'whack' };
+  weapon?: { small: Dice; large: Dice; hitBonus: number; skill: string; bimanual: boolean; kind: 'pierce' | 'slash' | 'whack'; role?: 'launcher' | 'ammo' | 'missile' }; // launchers fire ammo of the same skill; missiles (darts) are thrown by hand
   armor?: { slot: ArmorSlot; ac: number; mc: number };
   food?: { nutrition: number };
   use?(ctx: Ctx, user: EntityId, item: EntityId): void; // quaff/read effect
@@ -360,6 +372,7 @@ interface ViewCell {
   g: DefId | null; // remembered terrain glyph key
   v: boolean; // visible now?
   o?: DefId; // top object's shown id: live when visible, remembered otherwise
+  m?: DefId; // monster remembered on a cell not seen now; live monsters are only in `entities`
 }
 interface ViewItem { id: EntityId; letter: string | null; g: DefId; cls: ObjectClass; name: Msg; equipped: EquipSlot | null }
 interface ViewEntity {
@@ -451,7 +464,7 @@ interface Replay {
   mods: ModRef[];
   actions: PlayerAction[];
 }
-// Save text = JSON.stringify({ format: 'nh-ts', version: 4, mods, state, replay }) // v3 saves migrate by adding occupation: null
+// Save text = JSON.stringify({ format: 'nh-ts', version: 5, mods, state, replay }) // v3 and v4 saves migrate by adding occupation: null and monsterMemory: {}
 ```
 
 After `new` or `load`, the host sends a full snapshot. After each `act`, it sends a delta. Every action, including each `continue`, is appended to the replay, and replaying `{ seed, width, height, mods, actions }` must reproduce `stateHash`.

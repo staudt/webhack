@@ -98,6 +98,15 @@ export interface HelplessComponent {
   reasonKey: string;
 }
 
+/**
+ * An intrinsic or timed property (ref: include/prop.h, youprop.h). Keys are content-defined,
+ * e.g. 'cold_res', 'stunned'. `timeout` is the turn it ends, 0 for none.
+ */
+export interface PropState {
+  intrinsic: boolean;
+  timeout: number;
+}
+
 /** All components are plain data. */
 export interface Components {
   pos?: PosComponent;
@@ -110,6 +119,7 @@ export interface Components {
   item?: ItemComponent;
   hunger?: HungerComponent;
   helpless?: HelplessComponent;
+  props?: Record<string, PropState>;
 }
 
 export interface Entity {

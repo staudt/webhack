@@ -50,6 +50,18 @@ describe('defineObject validation', () => {
     ).not.toThrow();
   });
 
+  test('gems and every weapon role are accepted', () => {
+    expect(() =>
+      loadMods([
+        mod('ob', (api) => {
+          api.defineObject(objDef('g', { class: 'gem' }));
+          for (const role of ['launcher', 'ammo', 'missile'] as const)
+            api.defineObject(objDef(role, { weapon: { ...WEAPON, role } } as Partial<ObjectDef>));
+        }),
+      ]),
+    ).not.toThrow();
+  });
+
   test.each([
     ['nameKey', { nameKey: '' }],
     ['descKey', { descKey: '' }],
@@ -80,6 +92,7 @@ describe('defineObject validation', () => {
     ['weapon.skill', { weapon: { ...WEAPON, skill: '' } }],
     ['weapon.bimanual', { weapon: { ...WEAPON, bimanual: 0 } }],
     ['weapon.kind', { weapon: { ...WEAPON, kind: 'blunt' } }],
+    ['weapon.role', { weapon: { ...WEAPON, role: 'thrown' } }],
     ['armor.slot', { class: 'armor', armor: { slot: 'legs', ac: 1, mc: 0 } }],
     ['armor.ac', { class: 'armor', armor: { slot: 'helm', ac: 21, mc: 0 } }],
     ['armor.mc', { class: 'armor', armor: { slot: 'helm', ac: 1, mc: 4 } }],

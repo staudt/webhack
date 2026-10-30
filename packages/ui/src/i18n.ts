@@ -43,6 +43,7 @@ export const uiMessagesEn: Record<string, string> = {
   'ui.class.food': 'Comestibles',
   'ui.class.scroll': 'Scrolls',
   'ui.class.potion': 'Potions',
+  'ui.class.gem': 'Gems/Stones',
   'ui.class.other': 'Other',
   'ui.equipped.weapon': 'weapon in hand',
   'ui.equipped.worn': 'being worn',

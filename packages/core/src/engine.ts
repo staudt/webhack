@@ -193,6 +193,20 @@ export function createEngine(mods: readonly Mod[], opts: EngineOptions = {}): En
       if (o === undefined) delete objMemory[String(i)];
       else objMemory[String(i)] = o;
     }
+    // ref: src/display.c: a monster's glyph stays on a cell until the cell is seen again
+    const monMemory = (state.monsterMemory[level.id] ??= {});
+    const mons = new Map<number, DefId>();
+    for (const id of sortedIds(state)) {
+      const e = state.entities[String(id)];
+      const p = e?.c.pos;
+      if (e && p && p.level === level.id && id !== state.playerId && registry.isMonster(e.def))
+        mons.set(p.y * level.width + p.x, e.def);
+    }
+    for (const i of visible) {
+      const m = mons.get(i);
+      if (m === undefined) delete monMemory[String(i)];
+      else monMemory[String(i)] = m;
+    }
     state.visible = visible;
   };
 
@@ -229,7 +243,7 @@ export function createEngine(mods: readonly Mod[], opts: EngineOptions = {}): En
       if (!roleDef) throw new Error('No player role registered');
       const s = seed >>> 0;
       const state: GameState = {
-        version: 4,
+        version: 5,
         seed: s,
         turn: 1,
         nextEntityId: 1,
@@ -242,6 +256,7 @@ export function createEngine(mods: readonly Mod[], opts: EngineOptions = {}): En
         playerId: 0,
         memory: {},
         objectMemory: {},
+        monsterMemory: {},
         appearances: {},
         discovered: [],
         visible: [],

@@ -63,6 +63,18 @@ describe('nh:search', () => {
     expect(mem).toBeDefined();
   });
 
+  test('a locked secret door is found as a locked door', () => {
+    for (const [seed, hidden] of [
+      [14, T.sdoor_locked_v],
+      [15, T.sdoor_locked_h],
+    ] as const) {
+      const s = setup(seed, hidden);
+      const events = searchUntil(s, () => s.terrainAt(4, 2) !== hidden);
+      expect(s.terrainAt(4, 2)).toBe(T.door_locked);
+      expect(events).toContainEqual({ type: 'msg', key: 'search.found_door' });
+    }
+  });
+
   test('finds a horizontal secret door too', () => {
     const s = setup(12, T.sdoor_h);
     searchUntil(s, () => s.terrainAt(4, 2) !== T.sdoor_h);

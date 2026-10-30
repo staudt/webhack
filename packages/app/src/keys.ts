@@ -56,7 +56,7 @@ const RUN_ARROWS: [string, Dir][] = [
   ['ArrowRight', 'e'],
 ];
 
-/** Running: g and G prefixes, Shift+direction. The double-tap gesture is set in `runGestures`. */
+/** Running: g and G prefixes, Shift+direction. */
 export const runKeys: ClientMod = {
   id: 'nh-run-keys',
   version: '1.0.0',
@@ -70,9 +70,8 @@ export const runKeys: ClientMod = {
   },
 };
 
-/** UI options for the run gestures: double tap and the g/G prefixes. */
-export const runGestures = {
-  doubleTap: { action: RUN_ACTION },
+/** UI options for the g/G run prefixes. */
+export const runPrefixes = {
   prefixes: {
     rush: (dir: Dir) => runAction(dir, 'rush'),
     run: (dir: Dir) => runAction(dir, 'run'),

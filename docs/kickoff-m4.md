@@ -50,5 +50,4 @@ Out of scope: shops, pets, spellcasting, wands, rings, amulets, tools, container
 
 - **CI:** confirm the workflow once a remote exists.
 - **`UiCommand` arguments:** the UI encodes picker arguments in the command id (`pick:nh:drop`). Consider a `params` field.
-- **Double tap to run:** on a real phone the double tap makes no visible difference (single taps already push toward the tap until something interrupts, which the player likes). Check whether the gesture fires at all on touch devices (tap timing, `click` vs touch events) before deciding to keep, fix or drop it.
 - **`ctx.interrupt()` reasons:** eating needs content-side `stopOccupation` to print "You stop eating". Consider passing a reason.

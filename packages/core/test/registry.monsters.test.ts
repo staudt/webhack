@@ -30,6 +30,8 @@ const monster = (name: string, extra: Record<string, unknown> = {}): MonsterDef 
     group: null,
     genFlags: [],
     difficulty: 2,
+    resists: [],
+    conveys: [],
     weight: 100,
     nutrition: 100,
     brain: 'm:b',
@@ -92,10 +94,26 @@ describe('defineMonster validation', () => {
     ['flags', { flags: [1] }],
     ['flags', { flags: 'animal' }],
     ['genFlags', { genFlags: [''] }],
+    ['resists', { resists: 'fire' }],
+    ['resists', { resists: [''] }],
+    ['resists', { resists: undefined }],
+    ['conveys', { conveys: [3] }],
+    ['conveys', { conveys: undefined }],
     ['brain', { brain: 5 }],
   ])('rejects bad %s', (path, extra) => {
     const issues = withMonster(extra);
     expect(issues.some((i) => i.path === path && i.defId === 'm:x')).toBe(true);
+  });
+
+  test('resists and conveys accept lists of names', () => {
+    expect(() =>
+      loadMods([
+        mod('m', (api) => {
+          api.defineBrain(brain('b'));
+          api.defineMonster(monster('x', { resists: ['fire', 'cold'], conveys: ['cold'] }));
+        }),
+      ]),
+    ).not.toThrow();
   });
 
   test('bad monster id', () => {

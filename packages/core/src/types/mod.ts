@@ -13,7 +13,8 @@ export interface TerrainDef {
   nameKey: string;
   passable: boolean;
   opaque: boolean;
-  door?: 'closed' | 'open' | 'doorway';
+  /** A locked door is a closed door that won't open (ref: rm.h D_LOCKED). */
+  door?: 'closed' | 'locked' | 'open' | 'doorway';
   stairs?: 'up' | 'down';
   glyph: Glyph;
   /** Hidden terrain (secret doors/corridors) is shown to clients as this terrain instead. */
@@ -31,7 +32,7 @@ export interface RoleDef {
 }
 
 /** ref: include/objclass.h enum obj_class_types (the classes implemented so far). */
-export type ObjectClass = 'weapon' | 'armor' | 'food' | 'potion' | 'scroll' | 'coin';
+export type ObjectClass = 'weapon' | 'armor' | 'food' | 'potion' | 'scroll' | 'coin' | 'gem';
 
 /** An object type, ported from struct objclass (ref: include/objclass.h, include/objects.h). */
 export interface ObjectDef {
@@ -65,6 +66,11 @@ export interface ObjectDef {
     skill: string;
     bimanual: boolean;
     kind: 'pierce' | 'slash' | 'whack';
+    /**
+     * Launchers fire ammo whose `skill` matches theirs (ref: objclass.h is_launcher/is_ammo, where
+     * ammo has a negative oc_skill); missiles (darts) are thrown by hand (is_missile).
+     */
+    role?: 'launcher' | 'ammo' | 'missile';
   };
   armor?: { slot: ArmorSlot; ac: number; mc: number };
   food?: { nutrition: number };
@@ -161,6 +167,10 @@ export interface MonsterDef {
   /** Extra generation flags, e.g. 'nogen', 'nohell', 'genocidable'. */
   genFlags: string[];
   difficulty: number;
+  /** Resistances (mresists), lowercased MR_ names without the prefix: 'fire', 'cold', 'sleep', 'disint', 'elec', 'poison', 'acid', 'stone'. */
+  resists: string[];
+  /** Resistances its corpse can convey (mconveys), same names. */
+  conveys: string[];
   /** Corpse weight (cwt). */
   weight: number;
   /** Corpse nutrition (cnutrit). */

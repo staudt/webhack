@@ -2,7 +2,7 @@ import type { Level, Room } from '../types/level';
 import type { Pos } from '../types/common';
 import type { Rng } from '../types/rng';
 import { ensureConnected, makeCorridors } from './corridors';
-import { D_CLOSED, D_HORIZ, D_ISOPEN, Grid, T, type IRoom } from './grid';
+import { D_CLOSED, D_LOCKED, D_HORIZ, D_ISOPEN, Grid, T, type IRoom } from './grid';
 import { maxRooms, makeRooms, sortRooms } from './rooms';
 import { PAL, PALETTE_KEYS, type LevelTerrain } from './terrain';
 import type { LevelId } from '../types/common';
@@ -62,10 +62,12 @@ function placeStairs(g: Grid, rng: Rng): { down: Pos; up: Pos } {
 function paletteIndex(typ: number, mask: number): number {
   switch (typ) {
     case T.DOOR:
+      if (mask & D_LOCKED) return PAL.door_locked;
       if (mask & D_CLOSED) return PAL.door_closed;
       if (mask & D_ISOPEN) return mask & D_HORIZ ? PAL.door_open_h : PAL.door_open_v;
       return PAL.doorway;
     case T.SDOOR:
+      if (mask & D_LOCKED) return mask & D_HORIZ ? PAL.sdoor_locked_h : PAL.sdoor_locked_v;
       return mask & D_HORIZ ? PAL.sdoor_h : PAL.sdoor_v;
     case T.SCORR:
       return PAL.scorr;

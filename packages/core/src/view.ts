@@ -64,6 +64,7 @@ export function buildSnapshot(registry: Registry, state: GameState): ViewSnapsho
   const n = level.width * level.height;
   const liveObjects = topObjects(registry, state, level);
   const objMemory = state.objectMemory[level.id];
+  const monMemory = state.monsterMemory[level.id];
   const cells: ViewCell[] = new Array<ViewCell>(n);
   let vp = 0;
   for (let i = 0; i < n; i++) {
@@ -73,6 +74,8 @@ export function buildSnapshot(registry: Registry, state: GameState): ViewSnapsho
     const cell: ViewCell = { g: m >= 0 ? (shown[m] ?? null) : null, v };
     const o = v ? liveObjects.get(i) : objMemory?.[String(i)];
     if (o !== undefined) cell.o = o;
+    const mm = v ? undefined : monMemory?.[String(i)];
+    if (mm !== undefined) cell.m = mm;
     cells[i] = cell;
   }
 
@@ -119,7 +122,7 @@ export function diffSnapshot(prev: ViewSnapshot, next: ViewSnapshot): ViewUpdate
   for (let i = 0; i < next.cells.length; i++) {
     const a = prev.cells[i] as ViewCell;
     const b = next.cells[i] as ViewCell;
-    if (a.g !== b.g || a.v !== b.v || a.o !== b.o) cells.push([i, b]);
+    if (a.g !== b.g || a.v !== b.v || a.o !== b.o || a.m !== b.m) cells.push([i, b]);
   }
   const delta: ViewDelta = {
     kind: 'delta',

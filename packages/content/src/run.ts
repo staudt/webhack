@@ -8,8 +8,9 @@ import {
   type ActionDef,
   type Ctx,
   type Dir,
-  type Offer,
+  type Json,
   type PlayerAction,
+  type PromptOption,
   type Pos,
   type TerrainDef,
 } from '@nh/core';
@@ -91,7 +92,7 @@ function lookaround(ctx: Ctx, s: Session, run: number): boolean {
       if (x === ux - s.dx && y === uy - s.dy) continue; // the square we are moving away from
       let corridor: boolean;
       if (obstructed(t) || t.id === 'nh:floor') continue; // more uninteresting terrain
-      if (t.door === 'closed') {
+      if (t.door === 'closed' || t.door === 'locked') {
         if (x !== ux && y !== uy) continue; // ignore if diagonal
         if (run !== 1) return true; // "You stop in front of the door."
         corridor = true; // orthogonal to a closed door, consider it a corridor
@@ -154,66 +155,91 @@ function lookaround(ctx: Ctx, s: Session, run: number): boolean {
   return false;
 }
 
+const DIRECTION_OPTIONS: PromptOption[] = DIR_LIST.map((d) => ({ value: d, key: `dir.${d}` }));
+
+interface StepResult {
+  cost: number;
+  interrupted: boolean;
+}
+
+/** One move of a run: the shared body of `perform` and of the first move after the direction prompt. */
+function runStep(ctx: Ctx, args: RunArgs): StepResult {
+  const run = RUN_MODES[args.mode];
+  const none: StepResult = { cost: 0, interrupted: false };
+  const s = beginSession(ctx, { dx: DIRS[args.dir].x, dy: DIRS[args.dir].y });
+  // The first step is taken straight away; later ones look around first.
+  if (s.moved && lookaround(ctx, s, run)) return none;
+  const level = getLevel(ctx.state);
+  const here = heroPos(ctx);
+  const to: Pos = { x: here.x + s.dx, y: here.y + s.dy };
+  const dir = DIR_LIST.find((d) => DIRS[d].x === s.dx && DIRS[d].y === s.dy);
+  if (!dir) return none;
+  // ref: src/hack.c domove_core(): a running hero does not attack a monster she can see.
+  if (visibleMonsterAt(ctx, to)) return none;
+  const attacking = monsterIdAt(ctx, to, level.id) !== null;
+  const check = checkStep(level, cellRules(level, ctx.defs), here, dir);
+  if (!attacking && !check.ok) {
+    // ref: src/hack.c test_move(): no auto-open while running; orthogonally it says so.
+    if (check.reason === 'closedDoor' && (s.dx === 0 || s.dy === 0))
+      ctx.emit({ type: 'msg', key: 'door.closed' });
+    return none;
+  }
+  const move = ctx.defs.actions.find((a) => a.handles === 'move');
+  if (!move) return none;
+  const cost = move.perform(ctx, { type: 'move', dir });
+  s.moved = true;
+  let interrupted = false;
+  if (attacking) interrupted = true;
+  else if (run < 8) {
+    // ref: src/hack.c domove_core(): running stops on a door or furniture (stairs)
+    const now = heroPos(ctx);
+    const t = terrainAt(ctx, now.x, now.y);
+    if (t.door !== undefined || t.stairs !== undefined) interrupted = true;
+  }
+  if (interrupted) ctx.interrupt();
+  return { cost, interrupted };
+}
+
 // ref: src/cmd.c do_rush(), do_run(), set_move_cmd(); src/hack.c domove_core(), lookaround()
 const run: ActionDef = {
   id: 'nh:run',
-  labelKey: 'action.run.rush',
+  labelKey: 'action.run',
   handles: 'mod',
-  offer(ctx, target) {
-    if (target.kind !== 'cell') return [];
-    const here = heroPos(ctx);
-    const { x, y } = target.pos;
-    if (!inBounds(getLevel(ctx.state), x, y)) return [];
-    const dx = x - here.x;
-    const dy = y - here.y;
-    // Adjacent cells keep their move/attack offers alone; a run starts from two cells away.
-    if (Math.max(Math.abs(dx), Math.abs(dy)) <= 1) return [];
-    // The nearest of the eight directions: straight unless the cell is off by more than 2:1.
-    const sx = 2 * Math.abs(dx) <= Math.abs(dy) ? 0 : Math.sign(dx);
-    const sy = 2 * Math.abs(dy) <= Math.abs(dx) ? 0 : Math.sign(dy);
-    const dir = DIR_LIST.find((d) => DIRS[d].x === sx && DIRS[d].y === sy);
-    if (!dir) return [];
-    const mk = (mode: RunMode): Offer => ({
-      action: { type: 'mod', action: 'nh:run', args: { dir, mode } },
-      labelKey: `action.run.${mode}`,
-      params: { dir: `@dir.${dir}` },
-    });
-    // `g` first: it is the one a double tap uses.
-    return [mk('rush'), mk('run'), mk('shift')];
+  offer(_ctx, target) {
+    // Keyboard runs carry a direction; from touch the Actions menu asks for one.
+    if (target.kind !== 'self') return [];
+    return [{ action: { type: 'mod', action: 'nh:run' }, labelKey: 'action.run' }];
   },
   perform(ctx, action) {
     const args = parseArgs(action);
-    if (!args) return 0;
-    const run = RUN_MODES[args.mode];
-    const s = beginSession(ctx, { dx: DIRS[args.dir].x, dy: DIRS[args.dir].y });
-    // The first step is taken straight away; later ones look around first.
-    if (s.moved && lookaround(ctx, s, run)) return 0;
-    const level = getLevel(ctx.state);
-    const here = heroPos(ctx);
-    const to: Pos = { x: here.x + s.dx, y: here.y + s.dy };
-    const dir = DIR_LIST.find((d) => DIRS[d].x === s.dx && DIRS[d].y === s.dy);
-    if (!dir) return 0;
-    // ref: src/hack.c domove_core(): a running hero does not attack a monster she can see.
-    if (visibleMonsterAt(ctx, to)) return 0;
-    const attacking = monsterIdAt(ctx, to, level.id) !== null;
-    const check = checkStep(level, cellRules(level, ctx.defs), here, dir);
-    if (!attacking && !check.ok) {
-      // ref: src/hack.c test_move(): no auto-open while running; orthogonally it says so.
-      if (check.reason === 'closedDoor' && (s.dx === 0 || s.dy === 0))
-        ctx.emit({ type: 'msg', key: 'door.closed' });
+    if (!args) {
+      const a = action.type === 'mod' ? (action.args as { dir?: unknown } | undefined) : undefined;
+      // Only a missing direction asks; any other bad argument does nothing.
+      if (a?.dir === undefined) {
+        ctx.ask(
+          {
+            id: 'run-direction',
+            kind: 'direction',
+            key: 'run.direction',
+            options: DIRECTION_OPTIONS,
+          },
+          'nh:run',
+          null,
+        );
+      }
       return 0;
     }
-    const move = ctx.defs.actions.find((a) => a.handles === 'move');
-    if (!move) return 0;
-    const cost = move.perform(ctx, { type: 'move', dir });
-    s.moved = true;
-    if (attacking) ctx.interrupt();
-    else if (run < 8) {
-      // ref: src/hack.c domove_core(): running stops on a door or furniture (stairs)
-      const now = heroPos(ctx);
-      const t = terrainAt(ctx, now.x, now.y);
-      if (t.door !== undefined || t.stairs !== undefined) ctx.interrupt();
-    }
+    return runStep(ctx, args).cost;
+  },
+  // The engine clears the occupation before answer() and does not call `continues`, so a run
+  // started from the prompt sets the occupation up and decides itself whether it goes on.
+  answer(ctx, value: Json) {
+    const dir = DIR_LIST.find((d) => d === value);
+    if (!dir) return 0;
+    const action: PlayerAction = { type: 'mod', action: 'nh:run', args: { dir, mode: 'rush' } };
+    ctx.state.occupation = { action, data: null };
+    const { cost, interrupted } = runStep(ctx, { dir, mode: 'rush' });
+    if (cost <= 0 || interrupted || !run.continues?.(ctx, action)) ctx.state.occupation = null;
     return cost;
   },
   continues(ctx) {

@@ -1,4 +1,4 @@
-export { createAsciiRenderer, autoFontSize, objectLayer } from './renderer';
+export { createAsciiRenderer, autoFontSize, objectLayer, monsterLayer } from './renderer';
 export type { AsciiRendererOptions, AsciiRenderer } from './renderer';
 export {
   clampToMap,

@@ -29,9 +29,6 @@ import { createMessageLog } from './messageLog';
 import { injectStyles } from './styles';
 import { an, ripArt, statusLines } from './status';
 
-/** Window for a double tap on the map, in ms. */
-export const DEFAULT_DOUBLE_TAP_MS = 350;
-
 /**
  * Delay before the UI sends `continue` for the next move of a travel, run or meal, so the hero is
  * seen walking. A little faster than NetHack's runmode "walk" delay.
@@ -55,13 +52,6 @@ export interface UiOptions {
   stepDelayMs?: number;
   /** Called by the tombstone's New game button; falls back to the menu item with id 'new'. */
   onNewGame?: () => void;
-  /**
-   * Double-tap gesture on the map. The first tap acts at once; a second tap within `windowMs`
-   * (default 350) of the first, on the same cell or next to it, performs the offer whose mod
-   * action id is `action` among the cell's `actionsFor` offers (the game decides what it does,
-   * e.g. a run). Offers with that id are never used for a single tap.
-   */
-  doubleTap?: { action: string; windowMs?: number };
   /**
    * Direction prefixes such as NetHack's `g` and `G`. A key bound to the ui command
    * `prefix:<name>` arms the prefix; the next direction key then performs `prefixes[name](dir)`.
@@ -382,53 +372,26 @@ export function createUi(opts: UiOptions): Ui {
     });
   };
 
-  const gestureAction = opts.doubleTap?.action;
-  const doubleTapMs = opts.doubleTap?.windowMs ?? DEFAULT_DOUBLE_TAP_MS;
-  const isGesture = (o: ActionOffer): boolean =>
-    gestureAction !== undefined && o.action.type === 'mod' && o.action.action === gestureAction;
-  let lastTap: { at: number; pos: Pos } | null = null;
-
   const onTap = (x: number, y: number): void => {
     if (modal) return;
     const pos = renderer.cellAt(x, y);
     if (!pos) return;
     const wasLook = lookMode;
-    // A second tap soon after the first, on the same cell: the first already acted.
-    const at = Date.now();
-    const prev = lastTap;
-    const double =
-      !wasLook &&
-      gestureAction !== undefined &&
-      prev !== null &&
-      at - prev.at <= doubleTapMs &&
-      Math.max(Math.abs(pos.x - prev.pos.x), Math.abs(pos.y - prev.pos.y)) <= 1;
-    // Any other tap while a travel or run animates just cancels it. A double tap's second tap
-    // starts the run: the engine drops the first tap's travel when the run action arrives.
-    if (double) cancelContinuing();
-    else if (cancelContinuing()) return;
+    // Any other tap while a travel or run animates just cancels it.
+    if (cancelContinuing()) return;
     if (wasLook) setLook(false);
     const p = playerPos;
     const dist = p ? Math.max(Math.abs(pos.x - p.x), Math.abs(pos.y - p.y)) : Infinity;
-    lastTap = wasLook || double ? null : { at, pos };
     if (!wasLook && dist === 0) {
-      // Not a menu after a double tap that has already brought the hero to this cell.
-      if (!double) openActions({ kind: 'self' });
+      openActions({ kind: 'self' });
     } else if (wasLook) {
       describe(pos);
     } else {
       void game.query.actionsFor({ kind: 'cell', pos }).then((offers) => {
         if (destroyed) return;
-        if (double) {
-          const gesture = offers.find(isGesture);
-          if (gesture) {
-            game.act(gesture.action);
-            return;
-          }
-        }
-        const tapOffers = offers.filter((o) => !isGesture(o));
-        const [first] = tapOffers;
-        if (tapOffers.length === 1 && first) game.act(first.action);
-        else if (tapOffers.length > 1) showModal(t('ui.actions'), offerEntries(offers), true);
+        const [first] = offers;
+        if (offers.length === 1 && first) game.act(first.action);
+        else if (offers.length > 1) showModal(t('ui.actions'), offerEntries(offers), true);
         else describe(pos);
       });
     }

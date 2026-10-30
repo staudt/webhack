@@ -9,6 +9,8 @@ export interface ViewCell {
   v: boolean;
   /** Top object's shown id: seen now if visible, else remembered. Absent when none. */
   o?: DefId;
+  /** A monster remembered on a cell not seen now (live monsters are in `entities`). */
+  m?: DefId;
 }
 
 /** An item in the hero's inventory, as the player knows it. */

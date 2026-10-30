@@ -1,54 +1,105 @@
 import { describe, expect, test } from 'vitest';
-import { isJsonPlain } from '@nh/core';
+import { DIR_LIST, isJsonPlain, type DefId, type Target } from '@nh/core';
 import { messagesEn } from '../src/index';
 import { dropAt, heroAt, mapSetup, newtAt, runDir } from './maps';
+import { engine } from './itemHelpers';
 
 const msgs = (events: { type: string; key?: string }[]): string[] =>
   events.flatMap((e) => (e.type === 'msg' && e.key ? [e.key] : []));
 
 describe('nh:run offers', () => {
   const rows = Array.from({ length: 9 }, (_, y) => (y === 4 ? '....@....' : '.........'));
-  const offersAt = (x: number, y: number) => {
-    const m = mapSetup(rows);
-    return engine
-      .query(m.state)
-      .actionsFor({ kind: 'cell', pos: { x, y } })
+  const runOffers = (target: Target) =>
+    engine
+      .query(mapSetup(rows).state)
+      .actionsFor(target)
       .filter((o) => o.action.type === 'mod' && o.action.action === 'nh:run');
-  };
-  const dirOf = (x: number, y: number) =>
-    (offersAt(x, y)[0]?.action as unknown as { args: { dir: string } }).args.dir;
 
-  test('cell targets get rush, run and shift; own cell and out of bounds none', () => {
-    expect(offersAt(4, 4)).toHaveLength(0); // own cell
-    expect(offersAt(5, 4)).toHaveLength(0); // adjacent: move/attack only
-    expect(offersAt(40, 4)).toHaveLength(0);
-    const e = offersAt(8, 4);
-    expect(e.map((o) => o.action)).toEqual([
-      { type: 'mod', action: 'nh:run', args: { dir: 'e', mode: 'rush' } },
-      { type: 'mod', action: 'nh:run', args: { dir: 'e', mode: 'run' } },
-      { type: 'mod', action: 'nh:run', args: { dir: 'e', mode: 'shift' } },
-    ]);
-    expect(e[0]?.params).toEqual({ dir: '@dir.e' });
-    expect(messagesEn['action.run.rush']).toBe('Rush {dir}');
-  });
-
-  test('the direction is the nearest of the eight', () => {
-    expect(dirOf(6, 4)).toBe('e');
-    expect(dirOf(8, 0)).toBe('ne');
-    expect(dirOf(0, 0)).toBe('nw');
-    expect(dirOf(0, 8)).toBe('sw');
-    expect(dirOf(8, 8)).toBe('se');
-    expect(dirOf(4, 8)).toBe('s');
-    expect(dirOf(4, 0)).toBe('n');
-    expect(dirOf(8, 3)).toBe('e'); // 4:1 slope
-    expect(dirOf(8, 2)).toBe('e'); // 2:1 slope is still straight
-    expect(dirOf(8, 1)).toBe('ne'); // steeper than 2:1 on the other axis
-    expect(dirOf(6, 0)).toBe('n'); // 1:2 is still straight
-    expect(dirOf(5, 0)).toBe('n'); // 1:4
+  test('one self offer; cells offer no run', () => {
+    const own = runOffers({ kind: 'self' });
+    expect(own.map((o) => o.action)).toEqual([{ type: 'mod', action: 'nh:run' }]);
+    expect(own[0]?.labelKey).toBe('action.run');
+    expect(messagesEn['action.run']).toBe('Run');
+    for (const [x, y] of [
+      [4, 4],
+      [5, 4],
+      [8, 4],
+      [0, 0],
+      [40, 4],
+    ] as const)
+      expect(runOffers({ kind: 'cell', pos: { x, y } })).toHaveLength(0);
   });
 });
 
-import { engine } from './itemHelpers';
+describe('nh:run direction prompt', () => {
+  const room = ['|.......|', '|.@.....|', '|.......|'];
+  const ask = (m: ReturnType<typeof mapSetup>) => {
+    const r = engine.step(m.state, { type: 'mod', action: 'nh:run' as DefId });
+    expect(r.continuing).toBe(false);
+    const p = m.state.pendingPrompt;
+    expect(p?.handler).toBe('nh:run');
+    expect(p?.prompt.kind).toBe('direction');
+    return p;
+  };
+
+  test('asks for a direction with eight options and costs nothing', () => {
+    const m = mapSetup(room);
+    const turn = m.state.turn;
+    const p = ask(m);
+    expect(p?.prompt.options?.map((o) => o.value)).toEqual(DIR_LIST);
+    expect(p?.prompt.options?.[0]?.key).toBe(`dir.${DIR_LIST[0]}`);
+    expect(m.state.turn).toBe(turn);
+  });
+
+  test('the answer rushes one move, then continue steps run on until it stops', () => {
+    const m = mapSetup(room);
+    const p = ask(m);
+    const r1 = engine.step(m.state, { type: 'answer', promptId: p!.prompt.id, value: 'e' });
+    expect(heroAt(m.state)).toEqual({ x: 3, y: 1 });
+    expect(r1.continuing).toBe(true);
+    expect(m.state.occupation?.action).toEqual({
+      type: 'mod',
+      action: 'nh:run',
+      args: { dir: 'e', mode: 'rush' },
+    });
+    let last = r1;
+    for (let i = 0; i < 10 && last.continuing; i++)
+      last = engine.step(m.state, { type: 'continue' });
+    expect(heroAt(m.state)).toEqual({ x: 7, y: 1 });
+    expect(m.state.occupation).toBeNull();
+  });
+
+  test('another action cancels it', () => {
+    const m = mapSetup(room);
+    const p = ask(m);
+    engine.step(m.state, { type: 'answer', promptId: p!.prompt.id, value: 'e' });
+    engine.step(m.state, { type: 'move', dir: 'n' });
+    expect(m.state.occupation).toBeNull();
+    expect(heroAt(m.state)).toEqual({ x: 3, y: 0 });
+    engine.step(m.state, { type: 'continue' });
+    expect(heroAt(m.state)).toEqual({ x: 3, y: 0 });
+  });
+
+  test('a first move into a wall ends at once', () => {
+    const m = mapSetup(['|@...|']);
+    const p = ask(m);
+    const r = engine.step(m.state, { type: 'answer', promptId: p!.prompt.id, value: 'w' });
+    expect(heroAt(m.state)).toEqual({ x: 1, y: 0 });
+    expect(r.continuing).toBe(false);
+    expect(m.state.occupation).toBeNull();
+  });
+
+  test('a bad answer costs nothing and does nothing', () => {
+    const m = mapSetup(room);
+    const p = ask(m);
+    const turn = m.state.turn;
+    const r = engine.step(m.state, { type: 'answer', promptId: p!.prompt.id, value: 'up' });
+    expect(heroAt(m.state)).toEqual({ x: 2, y: 1 });
+    expect(m.state.turn).toBe(turn);
+    expect(r.continuing).toBe(false);
+    expect(m.state.occupation).toBeNull();
+  });
+});
 
 describe('nh:run in a room', () => {
   test('rush runs straight to the wall', () => {

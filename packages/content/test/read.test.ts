@@ -38,6 +38,8 @@ describe('scroll of identify', () => {
       expect(s.state.entities[String(scroll)]).toBeUndefined();
       const prompt = s.state.pendingPrompt?.prompt;
       if (!prompt) continue; // identified all or "everything"
+      // 1 in 5 uncursed scrolls roll cval = rn2(5) (ref: read.c seffect_identify); this test covers limit 1
+      if (prompt.params?.n !== 1) continue;
       menus++;
       expect(s.state.turn).toBe(turn); // the move is spent on the answer
       expect(prompt.kind).toBe('menu');

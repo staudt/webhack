@@ -85,6 +85,16 @@ describe('monster brain', () => {
     expect(posOf(b.state, kobold).x).toBeLessThan(4);
   });
 
+  test('monsters do not path through locked doors, even ones that open closed doors', () => {
+    const b = setup(['------', '|@..X.|', '------']);
+    const kobold = addMon(b.state, 'nh:kobold', 5, 1);
+    const ev = run(b, 30);
+    expect(ev.some((e) => e.type === 'doorOpened')).toBe(false);
+    expect(posOf(b.state, kobold).x).toBe(5);
+    const lvl = b.state.levels['dlvl1'];
+    expect(lvl?.palette[lvl.cells[lvl.width + 4] ?? 0]).toBe('nh:door_locked');
+  });
+
   test('never steps diagonally through a doorway with a door, never into walls or entities', () => {
     // open door at (3,2): monster at (4,3) below-right must not cut the corner
     const t = setup(['-----', '|.@.|', '--+--', '|...|', '-----']);

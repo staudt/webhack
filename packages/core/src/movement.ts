@@ -8,7 +8,10 @@ import { DIRS, cellIndex, inBounds } from './util';
 export interface CellRules {
   passable: readonly boolean[];
   opaque: readonly boolean[];
+  /** Closed or locked: travel paths may go through it (ref: test_move() TEST_TRAV). */
   closedDoor: readonly boolean[];
+  /** Locked: walking into it does not open it. */
+  lockedDoor: readonly boolean[];
   /** Door that blocks diagonal moves: an 'open' or 'closed' door (not a doorway/broken door). */
   intactDoor: readonly boolean[];
 }
@@ -17,20 +20,23 @@ export function cellRules(level: Level, registry: Registry): CellRules {
   const passable: boolean[] = [];
   const opaque: boolean[] = [];
   const closedDoor: boolean[] = [];
+  const lockedDoor: boolean[] = [];
   const intactDoor: boolean[] = [];
   for (const id of level.palette) {
     const t = registry.terrain(id);
     passable.push(t.passable);
     opaque.push(t.opaque);
-    closedDoor.push(t.door === 'closed');
+    closedDoor.push(t.door === 'closed' || t.door === 'locked');
+    lockedDoor.push(t.door === 'locked');
     // ref: src/hack.c test_move() -- doorless_door(): D_NODOOR/D_BROKEN doorways don't block diagonals
-    intactDoor.push(t.door === 'closed' || t.door === 'open');
+    intactDoor.push(t.door === 'closed' || t.door === 'locked' || t.door === 'open');
   }
-  return { passable, opaque, closedDoor, intactDoor };
+  return { passable, opaque, closedDoor, lockedDoor, intactDoor };
 }
 
 export type StepCheck =
-  { ok: true } | { ok: false; reason: 'bounds' | 'blocked' | 'closedDoor' | 'diagonalDoor' };
+  | { ok: true }
+  | { ok: false; reason: 'bounds' | 'blocked' | 'closedDoor' | 'lockedDoor' | 'diagonalDoor' };
 
 /**
  * Terrain part of the hero's move test.
@@ -54,6 +60,8 @@ export function checkStep(level: Level, rules: CellRules, from: Pos, dir: Dir): 
       if (rules.intactDoor[here]) return { ok: false, reason: 'diagonalDoor' };
     }
   }
+  // ref: src/hack.c test_move() closed_door(): "This door is locked."
+  if (rules.lockedDoor[to]) return { ok: false, reason: 'lockedDoor' };
   if (rules.closedDoor[to]) return { ok: false, reason: 'closedDoor' };
   if (!rules.passable[to]) return { ok: false, reason: 'blocked' };
   return { ok: true };

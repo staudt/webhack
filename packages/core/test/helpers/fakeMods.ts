@@ -26,6 +26,7 @@ export function terrainMod(
           'blcorn',
           'brcorn',
           'door_closed',
+          'door_locked',
         ].includes(name);
         const def: TerrainDef = {
           id,
@@ -37,6 +38,7 @@ export function terrainMod(
         if (name === 'doorway') def.door = 'doorway';
         if (OPEN.has(name)) def.door = 'open';
         if (name === 'door_closed') def.door = 'closed';
+        if (name === 'door_locked') def.door = 'locked';
         if (name === 'stairs_up') def.stairs = 'up';
         if (name === 'stairs_down') def.stairs = 'down';
         api.defineTerrain(def);

@@ -54,6 +54,11 @@ export function objectLayer(c: ViewCell): DefId | null {
   return c.o ?? null;
 }
 
+/** The remembered monster glyph id to draw dimmed on a cell that is not in view now, or null. */
+export function monsterLayer(c: ViewCell): DefId | null {
+  return !c.v && c.m !== undefined ? c.m : null;
+}
+
 export function createAsciiRenderer(opts: AsciiRendererOptions = {}): AsciiRenderer {
   const fontFamily = opts.fontFamily ?? DEFAULT_FONT;
   const background = opts.background ?? '#000';
@@ -162,7 +167,13 @@ export function createAsciiRenderer(opts: AsciiRendererOptions = {}): AsciiRende
         if (!c || c.g === null) continue;
         const px = x * cellW - ox;
         const top = objectLayer(c);
-        if (top !== null) {
+        const mon = monsterLayer(c);
+        if (mon !== null) {
+          // A monster last seen here: its glyph, dimmed like a remembered object, on top of it.
+          ctx.fillStyle = background;
+          ctx.fillRect(px, dy, cellW, cellH);
+          atlas.draw(ctx, glyphFor(mon), true, px, dy, cellW, cellH);
+        } else if (top !== null) {
           // Objects replace the terrain glyph; dimmed when only remembered.
           ctx.fillStyle = background;
           ctx.fillRect(px, dy, cellW, cellH);

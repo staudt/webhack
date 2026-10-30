@@ -86,6 +86,7 @@ const OBJECT_CLASSES: readonly ObjectClass[] = [
   'potion',
   'scroll',
   'coin',
+  'gem',
 ];
 const ARMOR_SLOTS: readonly ArmorSlot[] = [
   'body',
@@ -204,8 +205,8 @@ export function loadMods(mods: readonly Mod[]): Registry {
         str(d.nameKey, 'nameKey', d.id);
         bool(d.passable, 'passable', d.id);
         bool(d.opaque, 'opaque', d.id);
-        if (d.door !== undefined && !['closed', 'open', 'doorway'].includes(d.door))
-          issue('door', "must be 'closed', 'open' or 'doorway'", d.id);
+        if (d.door !== undefined && !['closed', 'locked', 'open', 'doorway'].includes(d.door))
+          issue('door', "must be 'closed', 'locked', 'open' or 'doorway'", d.id);
         if (d.stairs !== undefined && !['up', 'down'].includes(d.stairs))
           issue('stairs', "must be 'up' or 'down'", d.id);
         glyph(d.glyph, d.id);
@@ -252,6 +253,12 @@ export function loadMods(mods: readonly Mod[]): Registry {
         int(d.difficulty, 'difficulty', 0, 100);
         int(d.weight, 'weight', 0, 100000);
         int(d.nutrition, 'nutrition', 0, 10000);
+        for (const [k, v] of [
+          ['resists', d.resists],
+          ['conveys', d.conveys],
+        ] as const)
+          if (!Array.isArray(v) || v.some((f) => typeof f !== 'string' || f === ''))
+            issue(k, 'must be an array of non-empty strings', d.id);
         if (!Array.isArray(d.attacks) || d.attacks.length > 6)
           issue('attacks', 'must be an array of at most 6 attacks', d.id);
         else
@@ -311,6 +318,8 @@ export function loadMods(mods: readonly Mod[]): Registry {
           bool(d.weapon.bimanual, 'weapon.bimanual', d.id);
           if (!['pierce', 'slash', 'whack'].includes(d.weapon.kind))
             issue('weapon.kind', "must be 'pierce', 'slash' or 'whack'", d.id);
+          if (d.weapon.role !== undefined && !['launcher', 'ammo', 'missile'].includes(d.weapon.role))
+            issue('weapon.role', "must be 'launcher', 'ammo' or 'missile'", d.id);
         }
         if (d.armor !== undefined) {
           if (!ARMOR_SLOTS.includes(d.armor.slot))

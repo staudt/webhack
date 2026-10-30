@@ -240,7 +240,7 @@ function throwit(ctx: Ctx, objId: EntityId, dir: Dir, shot: Shot): void {
       break;
     }
     const t = ctx.defs.terrain(level.palette[level.cells[y * level.width + x] ?? 0] as DefId);
-    if (!t.passable || t.door === 'closed') {
+    if (!t.passable || t.door === 'closed' || t.door === 'locked') {
       x -= dx;
       y -= dy;
       break;

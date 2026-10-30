@@ -27,6 +27,17 @@ describe('checkStep', () => {
     expect(reason(l, 2, 2, 'ne')).toBe('diagonalDoor');
     expect(reason(l, 2, 2, 'e')).toBe('ok');
   });
+  test('locked door orthogonal: its own reason, and closedDoor stays set for travel', () => {
+    const k = asciiLevel(['-----', '|...X', '|...|', '-----']);
+    expect(reason(k, 3, 1, 'e')).toBe('lockedDoor');
+    expect(RULES.closedDoor[9]).toBe(true);
+    expect(reason(k, 3, 1, 'se')).toBe('blocked'); // wall, not the door
+  });
+  test('diagonal into/out of a locked door is still a diagonal door', () => {
+    const k = asciiLevel(['...', '.X.', '...']);
+    expect(reason(k, 0, 0, 'se')).toBe('diagonalDoor');
+    expect(reason(k, 1, 1, 'se')).toBe('diagonalDoor');
+  });
   test('diagonal into/out of closed door blocked', () => {
     expect(reason(l, 3, 2, 'ne')).toBe('diagonalDoor');
     const c = asciiLevel(['...', '.+.', '...']);
@@ -59,6 +70,7 @@ describe('cellRules from registry', () => {
       api.defineTerrain(t('floor', {}));
       api.defineTerrain(t('wall', { passable: false, opaque: true }));
       api.defineTerrain(t('dc', { passable: false, opaque: true, door: 'closed' }));
+      api.defineTerrain(t('dl', { passable: false, opaque: true, door: 'locked' }));
       api.defineTerrain(t('do', { door: 'open' }));
       api.defineTerrain(t('dw', { door: 'doorway' }));
     },
@@ -72,5 +84,14 @@ describe('cellRules from registry', () => {
     expect(r.opaque).toEqual([false, true, false, true, false]);
     expect(r.closedDoor).toEqual([false, false, false, true, false]);
     expect(r.intactDoor).toEqual([false, false, true, true, false]);
+    expect(r.lockedDoor).toEqual([false, false, false, false, false]);
+  });
+  test('a locked door is closed, locked and intact', () => {
+    const level = asciiLevel(['.']);
+    level.palette = ['t:dl', 't:dc'] as DefId[];
+    const r = cellRules(level, loadMods([m]));
+    expect(r.closedDoor).toEqual([true, true]);
+    expect(r.lockedDoor).toEqual([true, false]);
+    expect(r.intactDoor).toEqual([true, true]);
   });
 });

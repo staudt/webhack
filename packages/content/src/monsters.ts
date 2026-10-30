@@ -28,6 +28,8 @@ export const MONSTERS: readonly MonsterDef[] = [
     difficulty: 1,
     weight: 10,
     nutrition: 20,
+    resists: [],
+    conveys: [],
     brain: 'nh:melee',
   },
   // ref: monsters.h MON("gecko", S_LIZARD, ...)
@@ -49,6 +51,8 @@ export const MONSTERS: readonly MonsterDef[] = [
     difficulty: 2,
     weight: 10,
     nutrition: 20,
+    resists: [],
+    conveys: [],
     brain: 'nh:melee',
   },
   // ref: monsters.h MON("iguana", S_LIZARD, ...)
@@ -70,6 +74,8 @@ export const MONSTERS: readonly MonsterDef[] = [
     difficulty: 3,
     weight: 30,
     nutrition: 30,
+    resists: [],
+    conveys: [],
     brain: 'nh:melee',
   },
   // ref: monsters.h MON("jackal", S_DOG, ...)
@@ -91,6 +97,8 @@ export const MONSTERS: readonly MonsterDef[] = [
     difficulty: 1,
     weight: 300,
     nutrition: 250,
+    resists: [],
+    conveys: [],
     brain: 'nh:melee',
   },
   // ref: monsters.h MON("fox", S_DOG, ...)
@@ -112,6 +120,8 @@ export const MONSTERS: readonly MonsterDef[] = [
     difficulty: 1,
     weight: 300,
     nutrition: 250,
+    resists: [],
+    conveys: [],
     brain: 'nh:melee',
   },
   // ref: monsters.h MON("coyote", S_DOG, ...)
@@ -133,6 +143,8 @@ export const MONSTERS: readonly MonsterDef[] = [
     difficulty: 2,
     weight: 300,
     nutrition: 250,
+    resists: [],
+    conveys: [],
     brain: 'nh:melee',
   },
   // ref: monsters.h MON("sewer rat", S_RODENT, ...)
@@ -154,6 +166,8 @@ export const MONSTERS: readonly MonsterDef[] = [
     difficulty: 1,
     weight: 20,
     nutrition: 12,
+    resists: [],
+    conveys: [],
     brain: 'nh:melee',
   },
   // ref: monsters.h MON("giant rat", S_RODENT, ...)
@@ -175,6 +189,8 @@ export const MONSTERS: readonly MonsterDef[] = [
     difficulty: 2,
     weight: 30,
     nutrition: 30,
+    resists: [],
+    conveys: [],
     brain: 'nh:melee',
   },
   // ref: monsters.h MON("kobold", S_KOBOLD, ...)
@@ -196,6 +212,8 @@ export const MONSTERS: readonly MonsterDef[] = [
     difficulty: 1,
     weight: 400,
     nutrition: 100,
+    resists: ['poison'],
+    conveys: [],
     brain: 'nh:melee',
   },
   // ref: monsters.h MON("large kobold", S_KOBOLD, ...)
@@ -217,6 +235,8 @@ export const MONSTERS: readonly MonsterDef[] = [
     difficulty: 2,
     weight: 450,
     nutrition: 150,
+    resists: ['poison'],
+    conveys: [],
     brain: 'nh:melee',
   },
   // ref: monsters.h MON(NAMS("kobold lord", ...), S_KOBOLD, ...); HI_LORD = CLR_MAGENTA
@@ -247,6 +267,8 @@ export const MONSTERS: readonly MonsterDef[] = [
     difficulty: 3,
     weight: 500,
     nutrition: 200,
+    resists: ['poison'],
+    conveys: [],
     brain: 'nh:melee',
   },
   // ref: monsters.h MON(NAM("gnome"), S_GNOME, ...)
@@ -268,6 +290,8 @@ export const MONSTERS: readonly MonsterDef[] = [
     difficulty: 3,
     weight: 650,
     nutrition: 100,
+    resists: [],
+    conveys: [],
     brain: 'nh:melee',
   },
   // ref: monsters.h MON(NAMS("gnome lord", ...), S_GNOME, ...)
@@ -289,6 +313,8 @@ export const MONSTERS: readonly MonsterDef[] = [
     difficulty: 4,
     weight: 700,
     nutrition: 120,
+    resists: [],
+    conveys: [],
     brain: 'nh:melee',
   },
   // ref: monsters.h MON(NAM("hobbit"), S_HUMANOID, ...)
@@ -310,6 +336,8 @@ export const MONSTERS: readonly MonsterDef[] = [
     difficulty: 2,
     weight: 500,
     nutrition: 200,
+    resists: [],
+    conveys: [],
     brain: 'nh:melee',
   },
   // ref: monsters.h MON(NAM("bat"), S_BAT, ...)
@@ -331,6 +359,8 @@ export const MONSTERS: readonly MonsterDef[] = [
     difficulty: 2,
     weight: 20,
     nutrition: 20,
+    resists: [],
+    conveys: [],
     brain: 'nh:melee',
   },
   // ref: monsters.h MON(NAM("giant bat"), S_BAT, ...)
@@ -352,6 +382,8 @@ export const MONSTERS: readonly MonsterDef[] = [
     difficulty: 3,
     weight: 30,
     nutrition: 30,
+    resists: [],
+    conveys: [],
     brain: 'nh:melee',
   },
   // ref: monsters.h MON(NAM("giant ant"), S_ANT, ...)
@@ -373,6 +405,8 @@ export const MONSTERS: readonly MonsterDef[] = [
     difficulty: 4,
     weight: 10,
     nutrition: 10,
+    resists: [],
+    conveys: [],
     brain: 'nh:melee',
   },
   // ref: monsters.h MON(NAM("hill orc"), S_ORC, ...)
@@ -404,6 +438,8 @@ export const MONSTERS: readonly MonsterDef[] = [
     difficulty: 4,
     weight: 1000,
     nutrition: 200,
+    resists: ['poison'],
+    conveys: [],
     brain: 'nh:melee',
   },
   // ref: monsters.h MON(NAM("dwarf"), S_HUMANOID, ...)
@@ -437,6 +473,8 @@ export const MONSTERS: readonly MonsterDef[] = [
     difficulty: 4,
     weight: 900,
     nutrition: 300,
+    resists: [],
+    conveys: [],
     brain: 'nh:melee',
   },
   // ref: monsters.h MON(NAM("manes"), S_IMP, ...)
@@ -462,6 +500,8 @@ export const MONSTERS: readonly MonsterDef[] = [
     difficulty: 3,
     weight: 100,
     nutrition: 100,
+    resists: ['poison', 'sleep'],
+    conveys: [],
     brain: 'nh:melee',
   },
   // ref: monsters.h MON(NAM("rothe"), S_QUADRUPED, ...)
@@ -487,6 +527,8 @@ export const MONSTERS: readonly MonsterDef[] = [
     difficulty: 4,
     weight: 400,
     nutrition: 100,
+    resists: [],
+    conveys: [],
     brain: 'nh:melee',
   },
 ];

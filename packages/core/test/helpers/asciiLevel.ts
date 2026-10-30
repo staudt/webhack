@@ -13,6 +13,7 @@ export const PAL = {
   doorway: 6,
   up: 7,
   down: 8,
+  locked: 9,
 } as const;
 const CHARS: Record<string, number> = {
   ' ': PAL.stone,
@@ -25,6 +26,7 @@ const CHARS: Record<string, number> = {
   d: PAL.doorway,
   '<': PAL.up,
   '>': PAL.down,
+  X: PAL.locked,
 };
 const palette: DefId[] = [
   'nh:stone',
@@ -36,13 +38,15 @@ const palette: DefId[] = [
   'nh:doorway',
   'nh:stairs_up',
   'nh:stairs_down',
+  'nh:door_locked',
 ];
 const flags = (f: (i: number) => boolean): boolean[] => palette.map((_, i) => f(i));
 export const RULES: CellRules = {
-  passable: flags((i) => i !== PAL.stone && i !== PAL.wall && i !== PAL.closed),
-  opaque: flags((i) => i === PAL.stone || i === PAL.wall || i === PAL.closed),
-  closedDoor: flags((i) => i === PAL.closed),
-  intactDoor: flags((i) => i === PAL.closed || i === PAL.open),
+  passable: flags((i) => i !== PAL.stone && i !== PAL.wall && i !== PAL.closed && i !== PAL.locked),
+  opaque: flags((i) => i === PAL.stone || i === PAL.wall || i === PAL.closed || i === PAL.locked),
+  closedDoor: flags((i) => i === PAL.closed || i === PAL.locked),
+  lockedDoor: flags((i) => i === PAL.locked),
+  intactDoor: flags((i) => i === PAL.closed || i === PAL.locked || i === PAL.open),
 };
 
 /** Builds a Level from ASCII rows. `lit` rows use 'L' for lit; default all dark. Rows are padded with stone. */

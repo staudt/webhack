@@ -27,6 +27,8 @@ export const D_ISOPEN = 1;
 export const D_CLOSED = 2;
 /** Door sits in a horizontal wall (ref: rm.h levl[x][y].horizontal). */
 export const D_HORIZ = 4;
+/** ref: include/rm.h D_LOCKED */
+export const D_LOCKED = 8;
 
 /** ref: include/rm.h IS_WALL() (includes corners, excludes stone) */
 export const isWall = (t: number): boolean => t >= T.VWALL && t <= T.BRCORNER;
