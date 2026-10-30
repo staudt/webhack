@@ -10,7 +10,8 @@
     "typecheck": "tsc --noEmit -p . && tsc --noEmit -p test"
   },
   "dependencies": {
-    "@nh/core": "workspace:*"
+    "@nh/core": "workspace:*",
+    "vitest": "^5.0.5"
   },
   "devDependencies": {
     "@nh/content": "workspace:*"
