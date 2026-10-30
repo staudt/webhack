@@ -24,8 +24,23 @@ describe('vanilla monsters', () => {
     for (const m of MONSTERS) expect(messagesEn, m.nameKey).toHaveProperty([m.nameKey]);
   });
 
-  test('every attack is physical damage', () => {
-    for (const m of MONSTERS) for (const a of m.attacks) expect(a.ad, m.id).toBe('phys');
+  test('every attack uses a damage type the port implements', () => {
+    // ref: include/monattk.h AD_*: the types milestone 4 handles
+    const known = [
+      'phys',
+      'elec',
+      'fire',
+      'cold',
+      'slee',
+      'drst',
+      'acid',
+      'stun',
+      'plys',
+      'stck',
+      'drco',
+    ];
+    for (const m of MONSTERS)
+      for (const a of m.attacks) expect(known, `${m.id} ${a.ad}`).toContain(a.ad);
   });
 
   test('newt matches include/monsters.h', () => {

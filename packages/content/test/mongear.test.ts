@@ -86,7 +86,12 @@ describe('armor class', () => {
     mongets(ctx, k, 'nh:leather_armor');
     mongets(ctx, k, 'nh:orcish_helm');
     mDoWear(ctx, k, true);
-    expect(findMac(t.state, defs, k)).toBe(10 - bonus('nh:orcish_helm'));
+    // mongets() inits the helm randomly, so count its enchantment (ARM_BONUS = a_ac + spe)
+    const helm = Object.values(t.state.entities).find(
+      (e) => e.c.item?.carriedBy === k && e.def === 'nh:orcish_helm',
+    );
+    expect(helm?.c.item?.equipped).toBe('helm');
+    expect(findMac(t.state, defs, k)).toBe(10 - bonus('nh:orcish_helm') - (helm?.c.item?.spe ?? 0));
   });
 });
 

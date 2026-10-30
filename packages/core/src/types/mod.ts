@@ -137,9 +137,11 @@ export type AttackType =
   | 'gaze'
   | 'tentacle'
   | 'weapon'
-  | 'magic';
+  | 'magic'
+  /** AT_NONE: a passive response when the monster is hit (molds, floating eye, acid blob). */
+  | 'passive';
 
-/** ref: include/monattk.h; only 'phys' damage is implemented in milestone 2. */
+/** ref: include/monattk.h. `ad` is the lowercased AD_ name without the prefix ('phys', 'elec', 'plys', ...). */
 export interface AttackDef {
   at: AttackType;
   ad: string;

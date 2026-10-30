@@ -58,8 +58,7 @@ describe('monster brain', () => {
 
   test('a stealthy hero (XL3) does not wake sleepers', () => {
     const t = setup(room(12));
-    const xp = getPlayer(t.state).c.experience;
-    if (xp) xp.level = 3;
+    getPlayer(t.state).c.props = { stealth: { intrinsic: true, timeout: 0 } };
     const id = addMon(t.state, 'nh:jackal', 6, 1, { asleep: true });
     run(t, 10);
     expect(t.state.entities[String(id)]?.c.monster?.asleep).toBe(true);
@@ -67,8 +66,15 @@ describe('monster brain', () => {
 
   test('peaceful monsters never attack', () => {
     const t = setup(room(6));
-    addMon(t.state, 'nh:jackal', 3, 1, { peaceful: true });
-    const ev = run(t, 40);
+    const id = addMon(t.state, 'nh:jackal', 3, 1, { peaceful: true });
+    const ev: GameEvent[] = [];
+    for (let i = 0; i < 40; i++) {
+      ev.push(...t.wait().events);
+      // random spawns (1/70 per turn) would bring hostiles: keep only the peaceful jackal
+      for (const k of Object.keys(t.state.entities))
+        if (Number(k) !== t.state.playerId && Number(k) !== id && t.state.entities[k]?.c.monster)
+          delete t.state.entities[k];
+    }
     expect(ev.some((e) => e.type === 'msg' && e.key.startsWith('combat.mon_'))).toBe(false);
   });
 

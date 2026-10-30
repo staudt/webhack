@@ -28,6 +28,8 @@ export interface OpenMenu {
   onKey(e: KeyboardEvent): boolean;
   /** Currently highlighted button index. */
   getSel(): number;
+  /** Compass sheets only: choose a direction (used by the host for arrow-key chords). */
+  pickDir?(dir: string): void;
 }
 
 function glyphSpan(doc: Document, g: Glyph): HTMLSpanElement {
@@ -38,7 +40,7 @@ function glyphSpan(doc: Document, g: Glyph): HTMLSpanElement {
   return s;
 }
 
-function sheetShell(
+export function sheetShell(
   root: HTMLElement,
   title: string,
 ): { overlay: HTMLElement; sheet: HTMLElement } {
@@ -123,6 +125,14 @@ export function openMenu(root: HTMLElement, spec: MenuSpec): OpenMenu {
 export interface ChecklistOption {
   label: string;
   glyph?: Glyph;
+  /** A count from 1 to `max` may be chosen (a stack size). */
+  max?: number;
+}
+
+export interface ChecklistChoice {
+  index: number;
+  /** The chosen count; max when the whole stack is taken (or the option has no max). */
+  count: number;
 }
 
 export interface ChecklistSpec {
@@ -130,18 +140,27 @@ export interface ChecklistSpec {
   options: ChecklistOption[];
   confirmLabel: string;
   cancelLabel: string;
-  /** Chosen option indices, ascending. */
-  onConfirm(chosen: number[]): void;
+  lessLabel?: string;
+  moreLabel?: string;
+  /** Chosen options, ascending by index. */
+  onConfirm(chosen: ChecklistChoice[]): void;
   onCancel(): void;
   onClose?: () => void;
 }
 
-/** A multi-select sheet: toggle rows, then Confirm or Cancel. */
+/**
+ * A multi-select sheet: toggle rows, then Confirm or Cancel. Options with `max > 1` get a count
+ * stepper (default max); typing digits before a row's letter sets its count ("3a").
+ */
 export function openChecklist(root: HTMLElement, spec: ChecklistSpec): OpenMenu {
   const doc = root.ownerDocument;
   const { overlay, sheet } = sheetShell(root, spec.title);
   const rows: HTMLButtonElement[] = [];
   const checked: boolean[] = spec.options.map(() => false);
+  const maxOf = (i: number): number => spec.options[i]?.max ?? 1;
+  const counts: number[] = spec.options.map((o) => Math.max(1, o.max ?? 1));
+  const countEls: (HTMLElement | null)[] = spec.options.map(() => null);
+  let typed = '';
   let closed = false;
   const close = (): void => {
     if (closed) return;
@@ -150,7 +169,7 @@ export function openChecklist(root: HTMLElement, spec: ChecklistSpec): OpenMenu 
     spec.onClose?.();
   };
   const finish = (ok: boolean): void => {
-    const chosen = checked.flatMap((c, i) => (c ? [i] : []));
+    const chosen = checked.flatMap((c, i) => (c ? [{ index: i, count: counts[i] ?? 1 }] : []));
     close();
     if (ok) spec.onConfirm(chosen);
     else spec.onCancel();
@@ -161,14 +180,38 @@ export function openChecklist(root: HTMLElement, spec: ChecklistSpec): OpenMenu 
       b.classList.toggle('nh-sel', i === sel);
       b.classList.toggle('nh-checked', checked[i] === true);
       b.setAttribute('aria-checked', String(checked[i] === true));
+      const el = countEls[i];
+      if (el) el.textContent = String(counts[i]);
     });
     rows[sel]?.scrollIntoView?.({ block: 'nearest' });
   };
   const toggle = (i: number): void => {
     if (i < 0 || i >= checked.length) return;
-    checked[i] = !checked[i];
+    const n = Number(typed);
+    typed = '';
+    if (maxOf(i) > 1 && n > 0) {
+      // "3a": that many of a, and selected.
+      counts[i] = Math.min(n, maxOf(i));
+      checked[i] = true;
+    } else checked[i] = !checked[i];
     sel = i;
     mark();
+  };
+  const step = (i: number, d: number): void => {
+    counts[i] = Math.min(maxOf(i), Math.max(1, (counts[i] ?? 1) + d));
+    checked[i] = true;
+    sel = i;
+    mark();
+  };
+  const stepper = (i: number, label: string, text: string, d: number): HTMLElement => {
+    const b = doc.createElement('span');
+    b.className = 'nh-step';
+    b.setAttribute('role', 'button');
+    b.setAttribute('aria-label', label);
+    b.tabIndex = 0;
+    b.textContent = text;
+    b.addEventListener('click', () => step(i, d));
+    return b;
   };
   spec.options.forEach((o, i) => {
     const b = doc.createElement('button');
@@ -183,7 +226,20 @@ export function openChecklist(root: HTMLElement, spec: ChecklistSpec): OpenMenu 
     b.append(o.label);
     b.addEventListener('click', () => toggle(i));
     rows.push(b);
-    sheet.append(b);
+    if (maxOf(i) > 1) {
+      const wrap = doc.createElement('div');
+      wrap.className = 'nh-check-row';
+      const num = doc.createElement('span');
+      num.className = 'nh-count';
+      countEls[i] = num;
+      wrap.append(
+        b,
+        stepper(i, spec.lessLabel ?? 'Fewer', '−', -1),
+        num,
+        stepper(i, spec.moreLabel ?? 'More', '+', 1),
+      );
+      sheet.append(wrap);
+    } else sheet.append(b);
   });
   const confirm = doc.createElement('button');
   confirm.type = 'button';
@@ -203,16 +259,27 @@ export function openChecklist(root: HTMLElement, spec: ChecklistSpec): OpenMenu 
   const onKey = (e: KeyboardEvent): boolean => {
     if (closed) return false;
     const n = Math.max(1, rows.length);
+    if (/^[0-9]$/.test(e.key)) {
+      typed = (typed + e.key).slice(0, 4);
+      return true;
+    }
+    const digits = typed;
+    typed = '';
     if (e.key === 'ArrowDown' || e.key === 'ArrowRight') sel = (sel + 1) % n;
     else if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') sel = (sel - 1 + n) % n;
-    else if (e.key === ' ') toggle(sel);
-    else if (e.key === 'Enter') {
+    else if (e.key === ' ') {
+      typed = digits;
+      toggle(sel);
+    } else if (e.key === 'Enter') {
       finish(true);
       return true;
     } else if (e.key === 'Escape') {
       finish(false);
       return true;
-    } else if (/^[a-z]$/.test(e.key)) toggle(e.key.charCodeAt(0) - 97);
+    } else if (/^[a-z]$/.test(e.key)) {
+      typed = digits;
+      toggle(e.key.charCodeAt(0) - 97);
+    }
     mark();
     return true;
   };

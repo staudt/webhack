@@ -70,6 +70,7 @@ const ATTACK_TYPES: readonly AttackType[] = [
   'tentacle',
   'weapon',
   'magic',
+  'passive',
 ];
 const SIZES: readonly MonsterDef['size'][] = [
   'tiny',

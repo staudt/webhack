@@ -306,9 +306,13 @@ export function createEngine(mods: readonly Mod[], opts: EngineOptions = {}): En
         if (!def?.answer) throw new Error(`Prompt handler '${pending.handler}' has no answer()`);
         state.pendingPrompt = null;
         state.occupation = null;
-        spend(state, def, def.answer(ctx, action.value, pending.data));
+        // An answer may start a multi-turn action by setting `state.occupation` (e.g. a run).
+        const cost = def.answer(ctx, action.value, pending.data);
+        spend(state, def, cost);
         advanceTime(ctx);
         refreshVision(state);
+        if (cost === 0 || ctx.interrupted || state.gameOver || state.pendingPrompt)
+          state.occupation = null;
         return result(state, events);
       }
 

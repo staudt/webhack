@@ -355,3 +355,61 @@ describe('throw: kills', () => {
     expect(run()).toBe(run());
   });
 });
+
+describe('throw: the projectile event', () => {
+  type Proj = Extract<import('@nh/core').GameEvent, { type: 'projectile' }>;
+  const projs = (r: { events: import('@nh/core').GameEvent[] }): Proj[] =>
+    r.events.filter((e): e is Proj => e.type === 'projectile');
+
+  test('lists the seen cells in order, ends where it lands, and comes before the messages', () => {
+    const s = levelSetup(ROW);
+    spawn(s.state, 'nh:newt', { x: 9, y: 1 }, 1000);
+    const r = throwDir(s, dagger(s), 'e');
+    const p = projs(r);
+    expect(p).toHaveLength(1);
+    expect(p[0]?.g).toBe('nh:dagger');
+    expect(p[0]?.path).toEqual([
+      { x: 7, y: 1 },
+      { x: 8, y: 1 },
+      { x: 9, y: 1 },
+    ]);
+    const i = r.events.findIndex((e) => e.type === 'projectile');
+    const m = r.events.findIndex((e) => e.type === 'msg');
+    expect(i).toBeGreaterThanOrEqual(0);
+    expect(m === -1 || i < m).toBe(true);
+  });
+
+  test('never lists unseen cells', () => {
+    const s = levelSetup(ROW);
+    const w = s.state.levels['dlvl1']?.width ?? 0;
+    s.mod('nh:throw', { item: dagger(s) }); // asks; vision is refreshed after this step
+    s.state.visible = s.state.visible.filter((i) => i !== 1 * w + 8);
+    const prompt = s.state.pendingPrompt?.prompt;
+    const r = engine.step(s.state, { type: 'answer', promptId: prompt?.id ?? '', value: 'e' });
+    const path = projs(r)[0]?.path ?? [];
+    expect(path.some((c) => c.x === 8)).toBe(false);
+    expect(path.length).toBeGreaterThan(0);
+  });
+
+  test('an unidentified object shows its appearance', () => {
+    const s = levelSetup(ROW);
+    const pot = s.carry('nh:potion_of_water');
+    s.state.appearances['nh:potion_of_water'] = 'nh:potion_murky';
+    const p = projs(throwDir(s, pot, 'e'))[0];
+    expect(p?.g).toBe('nh:potion_murky');
+  });
+
+  test('a volley emits one event per missile', () => {
+    for (let seed = 1; seed <= 80; seed++) {
+      const s = levelSetup(ROW, seed);
+      const d = nhData(s.ctx);
+      if (d.skills) d.skills['dagger'] = P_EXPERT;
+      const id = s.carry('nh:dagger', { quantity: 6 });
+      const r = throwDir(s, id, 'e');
+      const thrown = 7 - (s.state.entities[String(id)]?.c.item?.quantity ?? 0);
+      expect(projs(r)).toHaveLength(thrown);
+      if (thrown > 1) return;
+    }
+    throw new Error('never a volley');
+  });
+});

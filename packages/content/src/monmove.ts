@@ -28,18 +28,13 @@ import {
   mpickstuff,
   setMonFlag,
 } from './mongear';
+import { P, heroHas } from './props';
 import { acurrstr } from './stats';
 
 /** ref: include/hack.h BOLT_LIM */
 export const BOLT_LIM = 8;
 /** ref: include/mondata.h MTSZ (length of mtrack) */
 export const MTSZ = 4;
-/**
- * The stub hero is a Valkyrie, who gains the Stealth intrinsic at experience level 3.
- * ref: src/attrib.c val_abil[] `{ 3, &(HStealth), "stealthy", "" }`
- */
-export const HERO_STEALTH_LEVEL = 3;
-
 /** ref: include/hacklib.h dist2() */
 export const dist2 = (x0: number, y0: number, x1: number, y1: number): number =>
   (x0 - x1) * (x0 - x1) + (y0 - y1) * (y0 - y1);
@@ -114,8 +109,15 @@ const isWanderer = (def: MonsterDef): boolean => def.flags.includes('wander');
 /** ref: include/mondata.h S_BAT class (every 'B' in our roster). */
 const isBatClass = (def: MonsterDef): boolean => def.glyph.ch === 'B';
 
-/** ref: src/mon.c monnear() */
-const monnear = (mx: number, my: number, x: number, y: number): boolean => dist2(mx, my, x, y) < 3;
+/** ref: include/hack.h NODIAG(): grid bugs cannot move or attack diagonally */
+const noDiag = (def: MonsterDef): boolean => def.id === 'nh:grid_bug';
+
+/** ref: src/mon.c monnear(): close enough to move or attack into (not diagonally for a grid bug) */
+const monnear = (def: MonsterDef, mx: number, my: number, x: number, y: number): boolean => {
+  const distance = dist2(mx, my, x, y);
+  if (distance === 2 && noDiag(def)) return false;
+  return distance < 3;
+};
 
 const monCount = (ctx: Ctx, id: EntityId) => {
   const e = ctx.state.entities[String(id)];
@@ -128,7 +130,7 @@ const monCount = (ctx: Ctx, id: EntityId) => {
 /**
  * Possibly awaken a sleeping monster; true if it woke up.
  * ref: src/monmove.c disturb(). The hero's line of sight is `couldsee()` (ignores light).
- * The Stealth test uses the Valkyrie's XL 3 intrinsic. Not applicable to our roster: ettin,
+ * The Stealth test uses the hero's Stealth property. Not applicable to our roster: ettin,
  * nymph, jabberwock, leprechaun, mimics, Aggravate Monster.
  */
 export function disturb(ctx: Ctx, id: EntityId): boolean {
@@ -137,7 +139,7 @@ export function disturb(ctx: Ctx, id: EntityId): boolean {
   const hp = hero.c.pos;
   if (!hp) return false;
   const level = getLevel(ctx.state, pos.level);
-  const stealth = (hero.c.experience?.level ?? 1) >= HERO_STEALTH_LEVEL;
+  const stealth = heroHas(ctx.state, P.STEALTH);
   if (
     dist2(pos.x, pos.y, hp.x, hp.y) <= 100 &&
     !stealth &&
@@ -171,8 +173,9 @@ interface Candidate {
  * Squares the monster could move to this turn, in mfndpos() order (x outer, y inner).
  * ref: src/mon.c mfndpos() with mon_allowflags(): hostile monsters may "move" onto the hero
  * (ALLOW_U), monsters that can open doors may enter closed doors (OPENDOOR). Walls, other
- * monsters, intact-door diagonals and tight squeezes for big monsters are rejected. Not
- * ported: water/lava, traps, boulders, scary squares, long worms, NODIAG, digging, wall-walking.
+ * monsters, intact-door diagonals, any diagonal for a grid bug (NODIAG) and tight squeezes for big
+ * monsters are rejected. Not ported: water/lava, traps, boulders, scary squares, long worms,
+ * digging, wall-walking.
  */
 export function mfndpos(
   ctx: Ctx,
@@ -207,8 +210,9 @@ export function mfndpos(
       // ref: mfndpos() UNLOCKDOOR/BUSTDOOR: none of our monsters carry keys or bust doors
       if (rules.lockedDoor[to]) continue;
       const diagonal = nx !== pos.x && ny !== pos.y;
-      // ref: mfndpos() "first diagonal checks": no diagonal moves into or out of an intact door
-      if (diagonal && (rules.intactDoor[here] || rules.intactDoor[to])) continue;
+      // ref: mfndpos() "first diagonal checks": no diagonal moves for a grid bug, and none into
+      // or out of an intact door
+      if (diagonal && (noDiag(def) || rules.intactDoor[here] || rules.intactDoor[to])) continue;
       const isHero = nx === heroPos.x && ny === heroPos.y;
       if (isHero) {
         if (m.peaceful) continue; // no ALLOW_U
@@ -446,7 +450,7 @@ export function dochug(ctx: Ctx, id: EntityId): void {
 
   const def = ctx.defs.monster(ctx.state.entities[String(id)]?.def ?? 'nh:none');
   const inrange = dist2(pos.x, pos.y, heroPos.x, heroPos.y) <= BOLT_LIM * BOLT_LIM;
-  const nearby = inrange && monnear(pos.x, pos.y, heroPos.x, heroPos.y);
+  const nearby = inrange && monnear(def, pos.x, pos.y, heroPos.x, heroPos.y);
 
   // ref: dochug(): "If monster is nearby you, and has to wield a weapon, do so. This costs the
   // monster a move, of course."
@@ -465,7 +469,12 @@ export function dochug(ctx: Ctx, id: EntityId): void {
     if (status === 'moved') return;
   }
   // MMOVE_DONE (picked something up) means no attack this move
-  if (status !== 'done' && !m.peaceful && inrange && monnear(pos.x, pos.y, heroPos.x, heroPos.y)) {
+  if (
+    status !== 'done' &&
+    !m.peaceful &&
+    inrange &&
+    monnear(def, pos.x, pos.y, heroPos.x, heroPos.y)
+  ) {
     monsterAttack(ctx, id);
   }
 }

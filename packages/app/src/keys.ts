@@ -1,4 +1,4 @@
-import type { ClientMod, Dir, PlayerAction } from '@nh/core';
+import type { AsyncCoreQuery, ClientMod, Dir, PlayerAction } from '@nh/core';
 
 /** Item verbs: key -> mod action id; each opens an item picker (host command `pick:<id>`). */
 const PICK_KEYS: [string, string][] = [
@@ -10,6 +10,7 @@ const PICK_KEYS: [string, string][] = [
   ['q', 'nh:quaff'],
   ['r', 'nh:read'],
   ['t', 'nh:throw'],
+  ['f', 'nh:fire'],
 ];
 
 /** Vanilla client keys beyond the UI defaults: stairs, inventory and item verbs. */
@@ -22,6 +23,9 @@ export const vanillaKeys: ClientMod = {
     api.bindKey('i', { type: 'ui', id: 'inventory' });
     api.bindKey(',', { type: 'ui', id: 'self:nh:pickup' });
     api.bindKey('\\', { type: 'ui', id: 'self:nh:discoveries' });
+    // Offered by the content once it has them; an unavailable self offer does nothing.
+    api.bindKey('x', { type: 'ui', id: 'self:nh:swap_weapon' });
+    api.bindKey('Ctrl+d', { type: 'ui', id: 'self:nh:kick' });
     for (const [k, id] of PICK_KEYS) api.bindKey(k, { type: 'ui', id: `pick:${id}` });
   },
 };
@@ -77,3 +81,33 @@ export const runPrefixes = {
     run: (dir: Dir) => runAction(dir, 'run'),
   },
 };
+
+/** Extended commands (`#enhance`, `#name`) as main-menu items, run if the self offers carry them. */
+export const EXTENDED_COMMANDS: readonly { id: string; labelKey: string; action: string }[] = [
+  { id: 'app.ext.enhance', labelKey: 'ui.ext.enhance', action: 'nh:enhance' },
+  { id: 'app.ext.call', labelKey: 'ui.ext.call', action: 'nh:call' },
+];
+
+export function extendedCommands(game: {
+  act(a: PlayerAction): void;
+  query: Pick<AsyncCoreQuery, 'actionsFor'>;
+}): ClientMod {
+  return {
+    id: 'nh-extended-commands',
+    version: '1.0.0',
+    register(api) {
+      for (const c of EXTENDED_COMMANDS) {
+        api.addMenuItem({
+          id: c.id,
+          labelKey: c.labelKey,
+          run: () => {
+            void game.query.actionsFor({ kind: 'self' }).then((offers) => {
+              const o = offers.find((x) => x.action.type === 'mod' && x.action.action === c.action);
+              if (o) game.act(o.action);
+            });
+          },
+        });
+      }
+    },
+  };
+}

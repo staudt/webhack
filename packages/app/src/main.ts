@@ -2,7 +2,7 @@ import type { ClientMod, PlayerAction } from '@nh/core';
 import { messagesEn } from '@nh/content';
 import { createAsciiRenderer } from '@nh/render-ascii';
 import { createUi, defaultKeymap } from '@nh/ui';
-import { runPrefixes, runKeys, vanillaKeys } from './keys';
+import { extendedCommands, runPrefixes, runKeys, vanillaKeys } from './keys';
 import { parseParams } from './params';
 import { createRemote, type Remote } from './remote';
 import { clearSave, loadSave, writeSave } from './storage';
@@ -96,7 +96,7 @@ const ui = createUi({
   root,
   renderer: createAsciiRenderer(),
   game: remote,
-  mods: [defaultKeymap, vanillaKeys, runKeys, appMenuMod],
+  mods: [defaultKeymap, vanillaKeys, runKeys, appMenuMod, extendedCommands(remote)],
   ...runPrefixes,
   onNewGame: () => void clearSave().then(startNew),
 });

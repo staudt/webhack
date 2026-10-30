@@ -20,6 +20,7 @@ import {
   rnl,
 } from '@nh/core';
 import { heroAttack, monsterIdAt } from './combat';
+import { escapeFromStickyMon, impairedDir } from './hackmove';
 import { lookHere } from './itemactions';
 import { T } from './terrain';
 
@@ -88,14 +89,19 @@ const move: ActionDef = {
     if (!pos) throw new Error('Player has no position');
     const level = getLevel(ctx.state, pos.level);
     const from = { x: pos.x, y: pos.y };
-    const d = DIRS[action.dir];
+    // ref: src/hack.c domove_core(): impaired_movement() picks a random direction when stunned
+    // (and the move is lost if none is found), then escape_from_sticky_mon()
+    const dir = impairedDir(ctx, action.dir);
+    if (dir === null) return NORMAL_SPEED;
+    const d = DIRS[dir];
     const to = { x: from.x + d.x, y: from.y + d.y };
+    if (inBounds(level, to.x, to.y) && escapeFromStickyMon(ctx, to)) return NORMAL_SPEED;
     // ref: src/hack.c domove(): a monster at the target is attacked before test_move() is
     // consulted, so attacks work diagonally through doorways. (domove_core's "don't attack if
     // running" check belongs to travel/run, which is a different action.)
     const victim = monsterIdAt(ctx, to, pos.level);
     if (victim !== null) return heroAttack(ctx, victim);
-    const check = checkStep(level, cellRules(level, ctx.defs), from, action.dir);
+    const check = checkStep(level, cellRules(level, ctx.defs), from, dir);
     if (check.ok) {
       // ref: src/hack.c domove()
       pos.x = to.x;

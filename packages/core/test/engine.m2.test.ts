@@ -178,8 +178,13 @@ const fkExtra = (api: Parameters<Mod['register']>[0]): void => {
       ctx.ask({ id: 'p1', kind: 'yn', key: 'q.yn' }, 'fk:ask', { n: 7 });
       return 0;
     },
-    answer(_ctx, value, data) {
+    answer(ctx, value, data) {
       ctl.answered.push({ value, data });
+      // An answer may start a multi-turn action (content's Run prompt does).
+      if (value === 'walk' || value === 'walk-die') {
+        ctx.state.occupation = { action: { type: 'mod', action: 'fk:walk' }, data: null };
+        if (value === 'walk-die') ctx.endGame(over('answered'));
+      }
       return 12;
     },
   });
@@ -623,6 +628,21 @@ describe('multi-turn actions', () => {
     expect(s.occupation).toBeNull();
     // answering a prompt works and leaves no occupation
     engine.step(s, { type: 'answer', promptId: 'p1', value: true });
+    expect(s.occupation).toBeNull();
+  });
+
+  test('an answer may start an occupation, but not one that outlives the game', () => {
+    let s = fresh();
+    engine.step(s, mod('fk:ask'));
+    let r = engine.step(s, { type: 'answer', promptId: 'p1', value: 'walk' });
+    expect(r.continuing).toBe(true);
+    engine.step(s, CONT);
+    expect(ctl.walks).toBe(1);
+    s = fresh();
+    engine.step(s, mod('fk:ask'));
+    r = engine.step(s, { type: 'answer', promptId: 'p1', value: 'walk-die' });
+    expect(s.gameOver).not.toBeNull();
+    expect(r.continuing).toBe(false);
     expect(s.occupation).toBeNull();
   });
 

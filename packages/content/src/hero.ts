@@ -1,6 +1,7 @@
 // Hero stats for the stub Valkyrie: initial attributes/HP/kit, HP regeneration and experience.
 import type { AttributesComponent, Ctx, EntityId, ModApi, MonsterDef } from '@nh/core';
 import { giveStartingKit } from './kit';
+import { adjabil } from './props';
 
 /**
  * The stub hero is a human, female, neutral Valkyrie. ref: src/role.c roles[] Valkyrie allows
@@ -215,6 +216,7 @@ export function gainExperience(ctx: Ctx, heroId: EntityId, exp: number): void {
     if (xp.points >= next) xp.points = next - 1;
     xp.level += 1;
     ctx.emit({ type: 'msg', key: 'exp.welcome', params: { level: xp.level } });
+    adjabil(ctx, heroId, xp.level - 1, xp.level); // ref: src/exper.c pluslvl()
   }
 }
 

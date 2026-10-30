@@ -4,6 +4,7 @@ import { itemMessagesEn } from './items.en';
 import { magicMessagesEn } from './magic.en';
 import { eatMessagesEn } from './eat.en';
 import { monGearMessagesEn } from './mongear.en';
+import { resistMessagesEn } from './resist.en';
 
 export const messagesEn: Record<string, string> = {
   ...objectMessagesEn,
@@ -11,6 +12,7 @@ export const messagesEn: Record<string, string> = {
   ...magicMessagesEn,
   ...eatMessagesEn,
   ...monGearMessagesEn,
+  ...resistMessagesEn,
   welcome: 'Hello, welcome to webhack! You are a {role}.',
   'welcome.back': 'Hello, welcome back to webhack! You are a {role}.',
   'door.opens': 'The door opens.',
@@ -121,4 +123,15 @@ export const messagesEn: Record<string, string> = {
   'nh:dwarf': 'dwarf',
   'nh:manes': 'manes',
   'nh:rothe': 'rothe',
+  'nh:grid_bug': 'grid bug',
+  'nh:lichen': 'lichen',
+  'nh:brown_mold': 'brown mold',
+  'nh:yellow_mold': 'yellow mold',
+  'nh:green_mold': 'green mold',
+  'nh:red_mold': 'red mold',
+  'nh:acid_blob': 'acid blob',
+  'nh:floating_eye': 'floating eye',
+  'nh:homunculus': 'homunculus',
+  'nh:centipede': 'centipede',
+  'nh:rabid_rat': 'rabid rat',
 };

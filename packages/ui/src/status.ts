@@ -42,10 +42,37 @@ const ENC_CLASS: Record<string, string> = {
   overloaded: 'nh-hp-crit',
 };
 
+/** Fields with their own display above. */
+/** Fields with their own place on the bottom lines (or the tombstone); never status words. */
+const HANDLED: ReadonlySet<string> = new Set([
+  'str',
+  'int',
+  'wis',
+  'dex',
+  'con',
+  'cha',
+  'dlvl',
+  'gold',
+  'hp',
+  'hpmax',
+  'ac',
+  'xl',
+  'xp',
+  'turn',
+  'hunger',
+  'encumbrance',
+  'dead',
+  'killer',
+  'endTurn',
+  'endDepth',
+  'endLevel',
+]);
+
 /** The two NetHack bottom lines; missing fields are omitted. ref: src/botl.c */
 export function statusLines(
   s: Status,
   t: (key: string) => string = (k) => uiMessagesEn[k] ?? k,
+  has: (key: string) => boolean = (k) => k in uiMessagesEn,
 ): [StatusField[], StatusField[]] {
   const l1: StatusField[] = [];
   const l2: StatusField[] = [];
@@ -88,6 +115,14 @@ export function statusLines(
   if (typeof enc === 'string') {
     const cls = ENC_CLASS[enc];
     l2.push({ text: t(`ui.status.${enc}`), ...(cls ? { cls } : {}) });
+  }
+  // Any other true (or positive) field with a `ui.status.<field>` word, such as `stun`: Stun.
+  for (const k of Object.keys(s).sort()) {
+    if (HANDLED.has(k)) continue;
+    const v = s[k];
+    if ((v as unknown) !== true && !(typeof v === 'number' && v > 0)) continue;
+    const key = `ui.status.${k}`;
+    if (has(key)) l2.push({ text: t(key), cls: 'nh-status-word' });
   }
   return [l1, l2];
 }

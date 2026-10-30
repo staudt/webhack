@@ -22,6 +22,7 @@ padding-top:env(safe-area-inset-top);padding-left:env(safe-area-inset-left);padd
 .nh-bar{flex:none;display:flex;gap:8px;padding:8px;background:var(--nh-panel);border-top:1px solid var(--nh-border)}
 .nh-btn{min-width:44px;min-height:44px;padding:8px 14px;font-size:16px;color:var(--nh-fg);background:#232833;border:1px solid var(--nh-border);border-radius:8px;cursor:pointer}
 .nh-bar .nh-btn{flex:1}
+.nh-bar .nh-menu-btn,.nh-bar .nh-zoom-btn{flex:none;min-width:48px;padding-left:10px;padding-right:10px}
 .nh-btn[aria-pressed="true"],.nh-sel{background:var(--nh-accent);color:#000}
 .nh-modal{position:absolute;inset:0;z-index:10;background:rgba(0,0,0,.6);display:flex;align-items:flex-end;justify-content:center}
 .nh-sheet{width:100%;max-width:480px;max-height:80dvh;overflow-y:auto;display:flex;flex-direction:column;gap:8px;padding:12px;background:var(--nh-panel);border-radius:12px 12px 0 0}
@@ -32,7 +33,16 @@ padding-top:env(safe-area-inset-top);padding-left:env(safe-area-inset-left);padd
 .nh-glyph{display:inline-block;min-width:1ch;font-family:ui-monospace,Menlo,Consolas,monospace;font-weight:bold;background:#000;border-radius:3px;text-align:center}
 .nh-checkbox::before{content:"[ ]";font-family:ui-monospace,Menlo,Consolas,monospace}
 .nh-checked .nh-checkbox::before{content:"[x]"}
-@media (max-width:400px){.nh-bar{gap:6px;padding:8px 6px}.nh-bar .nh-btn{padding:8px 6px;font-size:15px}}
+.nh-compass{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;width:min(100%,300px);margin:4px auto}
+.nh-dir{min-height:72px;font-size:28px;padding:0;text-align:center}
+.nh-dir:disabled{opacity:.3;cursor:default}
+.nh-dir.nh-cancel{font-size:22px;color:var(--nh-dim)}
+.nh-text-input{box-sizing:border-box;width:100%;min-height:44px;padding:8px 10px;font-size:16px;color:var(--nh-fg);background:var(--nh-bg);border:1px solid var(--nh-accent);border-radius:8px}
+.nh-check-row{display:flex;align-items:stretch;gap:6px}
+.nh-check-row .nh-check{flex:1;min-width:0}
+.nh-step{flex:none;display:flex;align-items:center;justify-content:center;min-width:44px;min-height:44px;font-size:22px;color:var(--nh-fg);background:#232833;border:1px solid var(--nh-border);border-radius:8px;cursor:pointer;user-select:none}
+.nh-count{flex:none;display:flex;align-items:center;justify-content:center;min-width:2ch;font-variant-numeric:tabular-nums}
+@media (max-width:400px){.nh-bar{gap:6px;padding:8px 6px}.nh-bar .nh-btn{padding:8px 6px;font-size:15px}.nh-bar .nh-menu-btn,.nh-bar .nh-zoom-btn{min-width:44px;padding-left:6px;padding-right:6px}}
 `;
 
 export function injectStyles(doc: Document): HTMLStyleElement {

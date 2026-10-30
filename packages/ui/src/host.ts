@@ -19,8 +19,17 @@ import type {
   ViewUpdate,
 } from '@nh/core';
 import { ARROW_CODES, DEFAULT_CHORD_MS, createChord, dirOf } from './chord';
-import { attachKeyUp, attachKeys, attachTap } from './input';
-import { DEFAULT_LOCALE, mergeMessages, translate, uiMessagesEn, type Catalogs } from './i18n';
+import { attachKeyUp, attachKeys, attachPinch, attachTap } from './input';
+import { openCompass, openTextPrompt } from './compass';
+import { clampCell, pinchCell } from './pinch';
+import {
+  DEFAULT_LOCALE,
+  hasMessage,
+  mergeMessages,
+  translate,
+  uiMessagesEn,
+  type Catalogs,
+} from './i18n';
 import { buildLayout } from './layout';
 import { Keymap } from './keymap';
 import { classKey, groupInventory } from './inventory';
@@ -34,6 +43,34 @@ import { an, ripArt, statusLines } from './status';
  * seen walking. A little faster than NetHack's runmode "walk" delay.
  */
 export const DEFAULT_STEP_DELAY_MS = 60;
+
+/**
+ * What a renderer may offer for zoom (the ASCII renderer does); the UI feature-detects it so
+ * other renderers need not implement it.
+ */
+export interface ZoomableRenderer {
+  setFit(on: boolean): void;
+  setZoom(cellCssPx: number): void;
+  resetZoom(): void;
+  getCell(): number;
+}
+const isZoomable = (r: object): r is ZoomableRenderer =>
+  typeof (r as Partial<ZoomableRenderer>).setFit === 'function' &&
+  typeof (r as Partial<ZoomableRenderer>).setZoom === 'function' &&
+  typeof (r as Partial<ZoomableRenderer>).getCell === 'function';
+
+/**
+ * What a renderer may offer to draw a thrown object in flight: a glyph (by legend id) over one
+ * cell, or none (`null`) to remove it. Feature-detected like {@link ZoomableRenderer}.
+ */
+export interface FlashRenderer {
+  flash(pos: Pos, g: string | null): void;
+}
+const isFlashable = (r: object): r is FlashRenderer =>
+  typeof (r as Partial<FlashRenderer>).flash === 'function';
+
+/** localStorage key of the per-device zoom: `fit`, or the cell width in CSS px. */
+export const ZOOM_STORAGE_KEY = 'nh.zoom';
 
 export interface GameClient {
   act(action: PlayerAction): void;
@@ -88,11 +125,14 @@ export function createUi(opts: UiOptions): Ui {
   const style = injectStyles(doc);
   const log = createMessageLog(doc);
   const layout = buildLayout(root, log.el);
+  let zoomFit = false;
   const refreshText = (): void => {
     layout.menuBtn.textContent = '☰';
     layout.menuBtn.setAttribute('aria-label', t('ui.menu'));
     layout.actionsBtn.textContent = t('ui.actions');
     layout.lookBtn.textContent = t('ui.look.mode');
+    layout.zoomBtn.textContent = '⤢';
+    layout.zoomBtn.setAttribute('aria-label', t(zoomFit ? 'ui.zoom.normal' : 'ui.zoom.fit'));
     layout.inventoryBtn.textContent = t('ui.inventory');
     log.setHistoryTitle(t('ui.history'));
   };
@@ -119,6 +159,45 @@ export function createUi(opts: UiOptions): Ui {
 
   renderer.mount(layout.map);
 
+  // Zoom: fit-to-width toggle and pinch, remembered per device.
+  const zoomer: ZoomableRenderer | null = isZoomable(renderer) ? renderer : null;
+  let zoomCell: number | null = null; // the pinched cell width, null = normal
+  const store = (): Storage | null => {
+    try {
+      return doc.defaultView?.localStorage ?? null;
+    } catch {
+      return null;
+    }
+  };
+  const saveZoom = (): void => {
+    try {
+      store()?.setItem(
+        ZOOM_STORAGE_KEY,
+        zoomFit ? 'fit' : zoomCell === null ? '' : String(zoomCell),
+      );
+    } catch {
+      /* storage unavailable: the zoom just is not remembered */
+    }
+  };
+  const applyZoom = (): void => {
+    if (!zoomer) return;
+    if (zoomFit) zoomer.setFit(true);
+    else if (zoomCell !== null) zoomer.setZoom(zoomCell);
+    else zoomer.resetZoom();
+    layout.zoomBtn.setAttribute('aria-pressed', String(zoomFit));
+    layout.zoomBtn.setAttribute('aria-label', t(zoomFit ? 'ui.zoom.normal' : 'ui.zoom.fit'));
+  };
+  if (zoomer) {
+    try {
+      const saved = store()?.getItem(ZOOM_STORAGE_KEY);
+      if (saved === 'fit') zoomFit = true;
+      else if (saved && Number.isFinite(Number(saved))) zoomCell = clampCell(Number(saved));
+    } catch {
+      /* ignore */
+    }
+    if (zoomFit || zoomCell !== null) applyZoom();
+  } else layout.zoomBtn.hidden = true;
+
   let destroyed = false;
   let playerPos: Pos | null = null;
   let lookMode = false;
@@ -132,6 +211,18 @@ export function createUi(opts: UiOptions): Ui {
   let continueInFlight = false;
   /** The next view's `continuing` is ignored (the player cancelled while a continue was in flight). */
   let skipNextContinuing = false;
+  // Projectile flights: the update that carries them is held back until the flight is drawn.
+  const flasher: FlashRenderer | null = isFlashable(renderer) ? renderer : null;
+  let anim: { timer: ReturnType<typeof setTimeout>; done: () => void } | null = null;
+  /** Ends a flight at once (dropping the remaining frames) and applies the held-back update. */
+  function finishAnimation(): void {
+    const a = anim;
+    if (!a) return;
+    anim = null;
+    clearTimeout(a.timer);
+    flasher?.flash({ x: 0, y: 0 }, null);
+    a.done();
+  }
   const clearStepTimer = (): void => {
     if (stepTimer !== null) clearTimeout(stepTimer);
     stepTimer = null;
@@ -142,6 +233,7 @@ export function createUi(opts: UiOptions): Ui {
    * engine drops the occupation with the next real action) and the input itself is swallowed.
    */
   const cancelContinuing = (): boolean => {
+    finishAnimation(); // a flight in progress is skipped; the input is then handled normally
     if (!isContinuing()) return false;
     clearStepTimer();
     if (continueInFlight) skipNextContinuing = true;
@@ -198,7 +290,7 @@ export function createUi(opts: UiOptions): Ui {
     offers.map((o) => ({ label: t(o.labelKey, o.params), run: () => game.act(o.action) }));
 
   const renderStatus = (s: ViewUpdate['status']): void => {
-    const lines = statusLines(s, t).map((fields) => {
+    const lines = statusLines(s, t, (k) => hasMessage(catalogs, locale, k)).map((fields) => {
       const div = doc.createElement('div');
       div.className = 'nh-status-line';
       for (const f of fields) {
@@ -424,6 +516,11 @@ export function createUi(opts: UiOptions): Ui {
 
   /** Completes an armed prefix with a direction command, or runs the command. */
   const dispatchDirection = (cmd: UiCommand): void => {
+    if (modal?.pickDir) {
+      const d = dirOf(cmd);
+      if (d !== null) modal.pickDir(d);
+      return;
+    }
     if (prefix === null) {
       runCommand(cmd);
       return;
@@ -443,7 +540,18 @@ export function createUi(opts: UiOptions): Ui {
   const detachKeyUp = attachKeyUp(doc, (e) => chord.up(e.code));
   let swallowUntil = -Infinity;
   const detachKeys = attachKeys(doc, (e) => {
-    if (modal) return modal.onKey(e);
+    if (modal) {
+      if (e.ctrlKey) return false;
+      if (modal.pickDir && ARROW_CODES.has(e.code)) {
+        // Arrows wait for the chord window, so Up+Left pick one diagonal.
+        const cmd = keymap.resolve(e);
+        if (cmd && dirOf(cmd) !== null) {
+          chord.down(e.code, e.repeat, cmd);
+          return true;
+        }
+      }
+      return modal.onKey(e);
+    }
     // A cancel swallows its key, and any key pressed with it (the second arrow of a diagonal).
     const now = e.timeStamp;
     if (now < swallowUntil && e.key !== 'Shift') return true;
@@ -452,6 +560,7 @@ export function createUi(opts: UiOptions): Ui {
       return true;
     }
     const cmd = keymap.resolve(e);
+    if (e.ctrlKey && !cmd) return false;
     if (prefix !== null) {
       // The key after a prefix: a direction completes it; anything else cancels it.
       if (!cmd && e.key !== 'Escape') return false; // Shift alone, etc.
@@ -480,6 +589,37 @@ export function createUi(opts: UiOptions): Ui {
     return true;
   });
   const detachTap = attachTap(layout.map, onTap);
+  let pinchStart = 0;
+  const detachPinch = attachPinch(layout.map, {
+    onStart: () => {
+      if (modal || !zoomer) return;
+      cancelContinuing();
+      pinchStart = zoomer.getCell();
+    },
+    onScale: (scale) => {
+      if (!zoomer || pinchStart === 0) return;
+      const cell = pinchCell(pinchStart, 1, scale);
+      zoomFit = false;
+      zoomCell = cell;
+      layout.zoomBtn.setAttribute('aria-pressed', 'false');
+      zoomer.setZoom(cell);
+    },
+    onEnd: () => {
+      if (pinchStart === 0) return;
+      pinchStart = 0;
+      saveZoom();
+      refreshText();
+    },
+  });
+  const onZoomBtn = (): void => {
+    if (cancelContinuing()) return;
+    if (modal || !zoomer) return;
+    zoomFit = !zoomFit;
+    applyZoom();
+    saveZoom();
+    refreshText();
+  };
+  layout.zoomBtn.addEventListener('click', onZoomBtn);
   const onMenuBtn = (): void => {
     if (cancelContinuing()) return;
     if (!modal) openMainMenu();
@@ -513,12 +653,68 @@ export function createUi(opts: UiOptions): Ui {
           title: t(p.key, p.params),
           options: opts.map((o) => {
             const glyph = o.glyph ? glyphOf(o.glyph) : undefined;
-            return { label: t(o.key, o.params), ...(glyph ? { glyph } : {}) };
+            return {
+              label: t(o.key, o.params),
+              ...(glyph ? { glyph } : {}),
+              ...(o.max !== undefined && o.max > 1 ? { max: o.max } : {}),
+            };
           }),
           confirmLabel: t('ui.confirm'),
           cancelLabel: t('ui.cancel'),
-          onConfirm: (idx) => answer(idx.flatMap((i) => (opts[i] ? [opts[i].value] : [])))(),
+          lessLabel: t('ui.count.less'),
+          moreLabel: t('ui.count.more'),
+          // A count below the stack size answers { value, count }; the whole stack is the value.
+          onConfirm: (chosen) =>
+            answer(
+              chosen.flatMap(({ index, count }) => {
+                const o = opts[index];
+                if (!o) return [];
+                return [o.max !== undefined && count < o.max ? { value: o.value, count } : o.value];
+              }),
+            )(),
           onCancel: () => answer([])(),
+          onClose,
+        }),
+      );
+      promptId = p.id;
+      return;
+    }
+    if (p.kind === 'direction') {
+      const opts = p.options ?? [];
+      const known = new Set(['n', 'ne', 'e', 'se', 's', 'sw', 'w', 'nw']);
+      const valueOf = new Map<string, unknown>();
+      for (const o of opts)
+        if (typeof o.value === 'string' && known.has(o.value)) valueOf.set(o.value, o.value);
+      showSheet((onClose) =>
+        openCompass(root, {
+          title: t(p.key, p.params),
+          enabled: new Set(valueOf.keys()),
+          cancelLabel: t('ui.compass.cancel'),
+          dirLabels: Object.fromEntries(
+            opts.flatMap((o) =>
+              typeof o.value === 'string' ? [[o.value, t(o.key, o.params)]] : [],
+            ),
+          ),
+          extras: opts
+            .filter((o) => !(typeof o.value === 'string' && known.has(o.value)))
+            .map((o) => ({ label: t(o.key, o.params), run: answer(o.value) })),
+          onPick: (dir) => answer(valueOf.get(dir))(),
+          onCancel: () => answer(null)(),
+          onClose,
+        }),
+      );
+      promptId = p.id;
+      return;
+    }
+    if (p.kind === 'text') {
+      showSheet((onClose) =>
+        openTextPrompt(root, {
+          title: t(p.key, p.params),
+          maxLength: p.maxLength ?? 80,
+          okLabel: t('ui.text.ok'),
+          cancelLabel: t('ui.cancel'),
+          onSubmit: (text) => answer(text)(),
+          onCancel: () => answer(null)(),
           onClose,
         }),
       );
@@ -543,6 +739,64 @@ export function createUi(opts: UiOptions): Ui {
     api,
     update(view, events, prompt, continuing = false) {
       if (destroyed) return;
+      finishAnimation();
+      const frames: { pos: Pos; g: string }[] = [];
+      if (flasher)
+        for (const ev of events)
+          if (ev.type === 'projectile') for (const pos of ev.path) frames.push({ pos, g: ev.g });
+      if (frames.length === 0) {
+        applyUpdate(view, events, prompt, continuing);
+        return;
+      }
+      // One cell per step, like a walking hero; then the view, messages and the next `continue`.
+      let i = 0;
+      const next = (): void => {
+        const f = frames[i++];
+        if (!f) {
+          finishAnimation();
+          return;
+        }
+        flasher?.flash(f.pos, f.g);
+        anim = { timer: setTimeout(next, stepDelayMs), done };
+      };
+      const done = (): void => applyUpdate(view, events, prompt, continuing);
+      next();
+    },
+    notify(key, params) {
+      if (!destroyed) log.push(t(key, params));
+    },
+    destroy() {
+      if (destroyed) return;
+      destroyed = true;
+      if (anim) clearTimeout(anim.timer);
+      anim = null;
+      clearStepTimer();
+      closeModal();
+      detachKeys();
+      detachKeyUp();
+      win?.removeEventListener('blur', chord.reset);
+      chord.reset();
+      detachTap();
+      detachPinch();
+      layout.zoomBtn.removeEventListener('click', onZoomBtn);
+      layout.inventoryBtn.removeEventListener('click', onInventoryBtn);
+      layout.menuBtn.removeEventListener('click', onMenuBtn);
+      layout.actionsBtn.removeEventListener('click', onActionsBtn);
+      layout.lookBtn.removeEventListener('click', onLookBtn);
+      renderer.destroy();
+      root.replaceChildren();
+      root.classList.remove('nh-ui');
+      style.remove();
+    },
+  };
+
+  function applyUpdate(
+    view: ViewUpdate,
+    events: GameEvent[],
+    prompt: Prompt | null,
+    continuing: boolean,
+  ): void {
+    {
       clearStepTimer();
       continueInFlight = false;
       const keepGoing = continuing && !skipNextContinuing;
@@ -594,28 +848,6 @@ export function createUi(opts: UiOptions): Ui {
       } else if (invOpen && modal) {
         showInventory(modal.getSel());
       }
-    },
-    notify(key, params) {
-      if (!destroyed) log.push(t(key, params));
-    },
-    destroy() {
-      if (destroyed) return;
-      destroyed = true;
-      clearStepTimer();
-      closeModal();
-      detachKeys();
-      detachKeyUp();
-      win?.removeEventListener('blur', chord.reset);
-      chord.reset();
-      detachTap();
-      layout.inventoryBtn.removeEventListener('click', onInventoryBtn);
-      layout.menuBtn.removeEventListener('click', onMenuBtn);
-      layout.actionsBtn.removeEventListener('click', onActionsBtn);
-      layout.lookBtn.removeEventListener('click', onLookBtn);
-      renderer.destroy();
-      root.replaceChildren();
-      root.classList.remove('nh-ui');
-      style.remove();
-    },
-  };
+    }
+  }
 }

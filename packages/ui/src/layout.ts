@@ -7,6 +7,7 @@ export interface Layout {
   actionsBtn: HTMLButtonElement;
   lookBtn: HTMLButtonElement;
   inventoryBtn: HTMLButtonElement;
+  zoomBtn: HTMLButtonElement;
 }
 
 export function buildLayout(root: HTMLElement, log: HTMLElement): Layout {
@@ -28,8 +29,10 @@ export function buildLayout(root: HTMLElement, log: HTMLElement): Layout {
   const actionsBtn = mk('nh-actions-btn');
   const lookBtn = mk('nh-look-btn');
   const inventoryBtn = mk('nh-inventory-btn');
+  const zoomBtn = mk('nh-zoom-btn');
   lookBtn.setAttribute('aria-pressed', 'false');
-  bar.append(menuBtn, actionsBtn, inventoryBtn, lookBtn);
+  zoomBtn.setAttribute('aria-pressed', 'false');
+  bar.append(menuBtn, actionsBtn, inventoryBtn, lookBtn, zoomBtn);
   root.append(log, map, status, bar);
-  return { log, map, status, bar, menuBtn, actionsBtn, lookBtn, inventoryBtn };
+  return { log, map, status, bar, menuBtn, actionsBtn, lookBtn, inventoryBtn, zoomBtn };
 }

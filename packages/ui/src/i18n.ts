@@ -49,6 +49,19 @@ export const uiMessagesEn: Record<string, string> = {
   'ui.equipped.worn': 'being worn',
   'ui.item': '{letter} - {name|an}',
   'ui.item.unlettered': '{name|an}',
+  'ui.status.stun': 'Stun',
+  'ui.status.conf': 'Conf',
+  'ui.status.blind': 'Blind',
+  'ui.status.hallu': 'Hallu',
+  'ui.status.deaf': 'Deaf',
+  'ui.ext.enhance': '#enhance',
+  'ui.ext.call': '#name',
+  'ui.compass.cancel': 'Cancel',
+  'ui.text.ok': 'OK',
+  'ui.count.less': 'Fewer',
+  'ui.count.more': 'More',
+  'ui.zoom.fit': 'Fit map width',
+  'ui.zoom.normal': 'Normal zoom',
   'ui.status.hungry': 'Hungry',
   'ui.status.weak': 'Weak',
   'ui.status.fainting': 'Fainting',
@@ -79,6 +92,11 @@ export const uiMessagesEn: Record<string, string> = {
 };
 
 const warned = new Set<string>();
+
+/** True if `key` has text in `locale` or the default locale. */
+export function hasMessage(catalogs: Catalogs, locale: string, key: string): boolean {
+  return lookup(catalogs, locale, key) !== undefined;
+}
 
 function lookup(catalogs: Catalogs, locale: string, key: string): string | undefined {
   const own = catalogs[locale]?.[key];

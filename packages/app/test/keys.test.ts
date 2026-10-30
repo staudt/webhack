@@ -45,3 +45,28 @@ test('binds run keys: g/G prefixes and Shift+direction', async () => {
     args: { dir: 'e', mode: 'rush' },
   });
 });
+
+import { extendedCommands, EXTENDED_COMMANDS } from '../src/keys';
+
+test('binds swap, kick and fire', () => {
+  const bound: Record<string, UiCommand> = {};
+  vanillaKeys.register({ bindKey: (k: string, c: UiCommand) => void (bound[k] = c) } as ClientApi);
+  expect(bound['x']).toEqual({ type: 'ui', id: 'self:nh:swap_weapon' });
+  expect(bound['Ctrl+d']).toEqual({ type: 'ui', id: 'self:nh:kick' });
+  expect(bound['f']).toEqual({ type: 'ui', id: 'pick:nh:fire' });
+});
+
+test('extended commands run the self offer if offered, else nothing', async () => {
+  const items: { id: string; run(): void }[] = [];
+  const acts: unknown[] = [];
+  const offers = [{ action: { type: 'mod', action: 'nh:enhance' } }];
+  extendedCommands({
+    act: (a) => void acts.push(a),
+    query: { actionsFor: () => Promise.resolve(offers) } as never,
+  }).register({ addMenuItem: (i: { id: string; run(): void }) => items.push(i) } as never);
+  expect(items.map((i) => i.id)).toEqual(EXTENDED_COMMANDS.map((c) => c.id));
+  items[0]!.run();
+  items[1]!.run(); // nh:call not offered
+  await new Promise((r) => setTimeout(r, 0));
+  expect(acts).toEqual([{ type: 'mod', action: 'nh:enhance' }]);
+});

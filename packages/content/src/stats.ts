@@ -1,5 +1,6 @@
 // Derived hero/monster numbers from carried items: AC, gold, encumbrance and movement.
 import {
+  NORMAL_SPEED,
   inventoryOf,
   type Ctx,
   type EntityId,
@@ -8,6 +9,7 @@ import {
   type Registry,
 } from '@nh/core';
 import { weight } from './items';
+import { P } from './props';
 
 /** ref: include/you.h AC_MAX */
 const AC_MAX = 99;
@@ -118,13 +120,22 @@ export const nearCapacity = (state: Readonly<GameState>, defs: Registry, id: Ent
   calcCapacity(state, defs, id, 0);
 
 /**
- * Movement the hero gains per turn. ref: src/allmain.c u_calc_moveamt(): the base speed
- * reduced by encumbrance. Valkyries get intrinsic Fast at experience level 7
- * (ref: src/attrib.c val_abil { 7, HFast }); that (a free move on 1 turn in 3) is NOT
- * implemented yet.
+ * Movement the hero gains per turn. ref: src/allmain.c u_calc_moveamt(): the base speed, a free
+ * action on 2 turns in 3 when Very_fast (a timed Fast) or on 1 turn in 3 when intrinsically Fast
+ * (the Valkyrie at experience level 7, ref: src/attrib.c val_abil { 7, HFast }), then reduced by
+ * encumbrance.
  */
 export function heroMovement(ctx: Ctx, hero: EntityId): number {
-  let moveamt = ctx.state.entities[String(hero)]?.c.actor?.speed ?? 12;
+  const e = ctx.state.entities[String(hero)];
+  let moveamt = e?.c.actor?.speed ?? 12;
+  const fast = e?.c.props?.[P.FAST];
+  if (fast && fast.timeout > 0) {
+    // Very_fast: gain a free action on 2/3 of turns
+    if (ctx.rng.rn2(3) !== 0) moveamt += NORMAL_SPEED;
+  } else if (fast?.intrinsic) {
+    // Fast (intrinsic): gain a free action on 1/3 of turns
+    if (ctx.rng.rn2(3) === 0) moveamt += NORMAL_SPEED;
+  }
   switch (nearCapacity(ctx.state, ctx.defs, hero)) {
     case 1:
       moveamt -= Math.trunc(moveamt / 4);

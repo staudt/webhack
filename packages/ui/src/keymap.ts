@@ -4,6 +4,7 @@ export interface KeyLike {
   code: string;
   key: string;
   shiftKey?: boolean;
+  ctrlKey?: boolean;
 }
 
 export class Keymap {
@@ -18,6 +19,8 @@ export class Keymap {
    * bindings are tried first, so Shift+arrow can differ from the plain arrow.
    */
   resolve(e: KeyLike): UiCommand | undefined {
+    // Ctrl chords only match explicit `Ctrl+<key>` bindings (bound as e.g. 'Ctrl+d').
+    if (e.ctrlKey) return this.map.get(`Ctrl+${e.key.toLowerCase()}`);
     if (e.shiftKey) {
       const shifted = this.map.get(`Shift+${e.code}`) ?? this.map.get(`Shift+${e.key}`);
       if (shifted) return shifted;

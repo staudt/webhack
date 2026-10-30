@@ -31,9 +31,27 @@ export interface AsciiRendererOptions {
 
 export type AsciiRenderer = Renderer & {
   readonly camera: CameraState;
-  /** Set the cell width in CSS px; the font size is derived from it. */
+  /** Set the cell width in CSS px; the font size is derived from it. Leaves fit-to-width mode. */
   setZoom(cellCssPx: number): void;
+  /** Fit-to-width: while on, the cell size is the largest that shows the map's whole width. */
+  setFit(on: boolean): void;
+  /** Back to the normal (automatic or configured) cell size; leaves fit-to-width mode. */
+  resetZoom(): void;
+  /** The current cell width in CSS px. */
+  getCell(): number;
+  readonly fit: boolean;
+  /**
+   * Overlays a glyph (a legend id, e.g. a thrown dagger) on one map cell, replacing any previous
+   * overlay; `null` removes it. The ASCII counterpart of NetHack's tmp_at(DISP_FLASH).
+   */
+  flash(pos: Pos, g: DefId | string | null): void;
 };
+
+/** Cell width (CSS px) that shows `mapWidth` columns across `cssWidth`, never below `min`. */
+export function fitCell(cssWidth: number, mapWidth: number, min = 3): number {
+  if (mapWidth <= 0) return min;
+  return Math.max(min, Math.floor(cssWidth / mapWidth));
+}
 
 const MISSING: Glyph = { ch: '?', fg: '#f0f' };
 const DEFAULT_FONT = 'ui-monospace, "DejaVu Sans Mono", Menlo, Consolas, monospace';
@@ -74,7 +92,10 @@ export function createAsciiRenderer(opts: AsciiRendererOptions = {}): AsciiRende
   let cssW = 0;
   let cssH = 0;
   let dpr = 1;
-  let fontSize = opts.fontSizeCssPx ?? 0; // 0 => auto
+  const baseFont = opts.fontSizeCssPx ?? 0; // 0 => auto
+  let fontSize = baseFont;
+  let fitOn = false;
+  let explicitZoom = false;
   let cellW = 10;
   let cellH = 20;
 
@@ -86,6 +107,7 @@ export function createAsciiRenderer(opts: AsciiRendererOptions = {}): AsciiRende
   let player: ViewPlayer | null = null;
   let baseLegend: Record<string, Glyph> = {};
   const overrides = new Map<string, Glyph>();
+  let flashed: { x: number; y: number; g: string } | null = null;
 
   // Camera
   let cam: CameraState = { x: 0, y: 0 };
@@ -102,14 +124,27 @@ export function createAsciiRenderer(opts: AsciiRendererOptions = {}): AsciiRende
     return overrides.get(id) ?? baseLegend[id] ?? MISSING;
   }
 
+  /** Font size (CSS px) whose monospace advance is `cell` px. */
+  function fontForCell(cell: number): number {
+    const m = (ctx ?? document.createElement('canvas').getContext('2d'))!;
+    m.save();
+    m.font = `100px ${fontFamily}`;
+    const ratio = m.measureText('M').width / 100 || 0.6;
+    m.restore();
+    return Math.max(4, cell / ratio);
+  }
+
   function measure(): void {
+    if (fitOn && width > 0) fontSize = fontForCell(fitCell(cssW, width));
     const size = fontSize > 0 ? fontSize : autoFontSize(cssW);
     const m = (ctx ?? document.createElement('canvas').getContext('2d'))!;
     m.save();
     m.font = `${size}px ${fontFamily}`;
     const adv = m.measureText('M').width;
     m.restore();
-    cellW = Math.max(Math.ceil(minCell), Math.ceil(adv));
+    // An explicit zoom (pinch, fit) may go below the automatic minimum; the epsilon absorbs
+    // float noise in the measured advance.
+    cellW = Math.max(explicitZoom ? 3 : Math.ceil(minCell), Math.ceil(adv - 0.01));
     cellH = Math.ceil(size * LINE);
     const px = size * dpr;
     atlas = new GlyphAtlas({
@@ -191,6 +226,14 @@ export function createAsciiRenderer(opts: AsciiRendererOptions = {}): AsciiRende
       ctx.fillRect(dx, dy, cellW, cellH);
       atlas.draw(ctx, glyphFor(e.g), false, dx, dy, cellW, cellH);
     }
+    const f = flashed;
+    if (f && f.x >= r.x0 && f.x < r.x1 && f.y >= r.y0 && f.y < r.y1) {
+      const fx = f.x * cellW - ox;
+      const fy = f.y * cellH - oy;
+      ctx.fillStyle = background;
+      ctx.fillRect(fx, fy, cellW, cellH);
+      atlas.draw(ctx, glyphFor(f.g), false, fx, fy, cellW, cellH);
+    }
   }
 
   function layout(): void {
@@ -240,6 +283,7 @@ export function createAsciiRenderer(opts: AsciiRendererOptions = {}): AsciiRende
     },
     apply(u: ViewUpdate): void {
       if (u.kind === 'full') {
+        const resized = u.width !== width;
         width = u.width;
         height = u.height;
         cells = u.cells.slice();
@@ -247,6 +291,7 @@ export function createAsciiRenderer(opts: AsciiRendererOptions = {}): AsciiRende
         player = u.player;
         baseLegend = u.legend;
         if (ctx) {
+          if (fitOn && resized) measure();
           retarget(true);
           target = { ...cam };
         }
@@ -277,12 +322,36 @@ export function createAsciiRenderer(opts: AsciiRendererOptions = {}): AsciiRende
     },
     setZoom(cellCssPx: number): void {
       if (!ctx) return;
-      ctx.save();
-      ctx.font = `100px ${fontFamily}`;
-      const ratio = ctx.measureText('M').width / 100 || 0.6;
-      ctx.restore();
-      fontSize = Math.max(4, cellCssPx / ratio);
+      fitOn = false;
+      explicitZoom = true;
+      fontSize = fontForCell(cellCssPx);
       layout();
+    },
+    setFit(on: boolean): void {
+      if (on === fitOn) return;
+      fitOn = on;
+      if (on) explicitZoom = true;
+      else {
+        explicitZoom = false;
+        fontSize = baseFont;
+      }
+      layout();
+    },
+    resetZoom(): void {
+      fitOn = false;
+      explicitZoom = false;
+      fontSize = baseFont;
+      layout();
+    },
+    flash(pos: Pos, g: DefId | string | null): void {
+      flashed = g === null ? null : { x: pos.x, y: pos.y, g };
+      schedule();
+    },
+    getCell(): number {
+      return cellW;
+    },
+    get fit(): boolean {
+      return fitOn;
     },
     destroy(): void {
       resizeObs?.disconnect();

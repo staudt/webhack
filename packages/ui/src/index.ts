@@ -1,5 +1,6 @@
 export const UI_VERSION = 1;
-export { createUi } from './host';
+export { createUi, ZOOM_STORAGE_KEY } from './host';
+export type { FlashRenderer, ZoomableRenderer } from './host';
 export { DEFAULT_STEP_DELAY_MS } from './host';
 export type { GameClient, UiOptions, Ui } from './host';
 export { defaultKeymap, Keymap } from './keymap';

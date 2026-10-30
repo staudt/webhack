@@ -5,6 +5,7 @@ import { MONSTERS } from './monsters';
 import { OBJECTS, APPEARANCES } from './objects';
 import { registerShuffle } from './o_init';
 import { nameItem } from './objnam';
+import { registerProps } from './props';
 import { registerStats } from './stats';
 import { ITEM_ACTIONS } from './itemactions';
 import { registerNomul } from './nomul';
@@ -41,6 +42,7 @@ export const vanillaMod: Mod = {
     for (const a of READ_ACTIONS) api.defineAction(a);
     for (const a of THROW_ACTIONS) api.defineAction(a);
     registerNomul(api);
+    registerProps(api);
     for (const a of EAT_ACTIONS) api.defineAction(a);
     registerCorpses(api);
     registerHunger(api);
@@ -83,6 +85,23 @@ export { experienceFor, gainExperience, newuexp, newhp, MAXULEV } from './hero';
 export { messagesEn } from './messages.en';
 export { ITEM_ACTIONS, lookHere, encumberMsg } from './itemactions';
 export { nomul } from './nomul';
+export {
+  P,
+  hasProp,
+  heroHas,
+  hasIntrinsic,
+  timeoutLeft,
+  setIntrinsic,
+  setItimeout,
+  incrItimeout,
+  makeStunned,
+  adjabil,
+} from './props';
+export { poisoned, adjattrib } from './attrib';
+export { mdamageu, hitmuAd, magicNegation } from './mhitu';
+export { passive } from './uhitm_passive';
+export { ustuck, setUstuck } from './hackmove';
+export { givit, shouldGivit, corpseIntrinsic, cpostfxOf } from './givit';
 export { giveStartingKit, VALKYRIE_KIT } from './kit';
 export {
   skillInit,

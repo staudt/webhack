@@ -28,7 +28,10 @@ import {
   vomit,
   type Victual,
 } from './hunger';
+import { cpostfxOf } from './givit';
+import { die, losehp, losestr } from './hp';
 import { gainExperience } from './hero';
+import { P, hasProp } from './props';
 import { addToInventory, nhData, placeOnFloor, splitStack } from './items';
 import { encumberMsg } from './itemactions';
 import { xnameOf } from './objnam';
@@ -90,48 +93,7 @@ function useup(ctx: Ctx, e: Entity): void {
   else ctx.remove(e.id);
 }
 
-/** Loses hit points, dying if they run out. ref: src/hack.c losehp() */
-export function losehp(ctx: Ctx, n: number, killer: string): void {
-  const h = hero(ctx);
-  const hp = h.c.hp;
-  if (!hp) return;
-  hp.cur -= n;
-  if (hp.cur > hp.max) hp.max = hp.cur;
-  ctx.interrupt(); // end_running()
-  if (hp.cur < 1) die(ctx, killer);
-}
-
-function die(ctx: Ctx, killer: string): void {
-  const h = hero(ctx);
-  say(ctx, 'combat.you_die');
-  ctx.endGame({
-    kind: 'died',
-    killer,
-    turn: ctx.state.turn,
-    depth: ctx.state.levels[ctx.state.currentLevel]?.depth ?? 1,
-    level: h.c.experience?.level ?? 1,
-  });
-}
-
-/** ref: src/attrib.c losestr(): strength points, then HP once it would drop below 3 */
-function losestr(ctx: Ctx, num: number, killer: string): void {
-  const h = hero(ctx);
-  const a = h.c.attributes;
-  if (!a) return;
-  let ustr = a.str - num;
-  let dmg = 0;
-  while (ustr < 3) {
-    ustr++;
-    num--;
-    dmg += 3 + ctx.rng.rn2(4); // rn1(4, 3)
-  }
-  if (dmg) {
-    losehp(ctx, dmg, killer);
-    const hp = h.c.hp;
-    if (hp && hp.max > 1) hp.max = Math.max(hp.max - dmg, 1);
-  }
-  if (num > 0) a.str = Math.max(3, a.str - num);
-}
+export { losehp };
 
 // ---------------------------------------------------------------------------------------------
 // the meal
@@ -401,18 +363,20 @@ function eatcorpse(ctx: Ctx, e: Entity, v: Victual): number {
     say(ctx, 'eat.tainted_note');
     useup(ctx, e);
     return 2;
-  } else if (mon.flags.includes('acid')) {
+  } else if (mon.flags.includes('acid') && !hasProp(hero(ctx), P.ACID_RES)) {
     tp++;
     say(ctx, 'eat.acid');
     losehp(ctx, ctx.rng.rnd(15), '@killer.acidic_corpse');
   } else if (mon.flags.includes('pois') && ctx.rng.rn2(5) !== 0) {
     tp++;
     say(ctx, 'eat.poisonous');
-    // Valkyries are not poison resistant: poison_strdmg(rnd(4), rnd(15), ...)
-    const strloss = ctx.rng.rnd(4);
-    const dmg = ctx.rng.rnd(15);
-    losestr(ctx, strloss, '@killer.poisonous_corpse');
-    if (!ctx.state.gameOver) losehp(ctx, dmg, '@killer.poisonous_corpse');
+    if (!hasProp(hero(ctx), P.POISON_RES)) {
+      // poison_strdmg(rnd(4), rnd(15), ...)
+      const strloss = ctx.rng.rnd(4);
+      const dmg = ctx.rng.rnd(15);
+      losestr(ctx, strloss, '@killer.poisonous_corpse');
+      if (!ctx.state.gameOver) losehp(ctx, dmg, '@killer.poisonous_corpse');
+    } else say(ctx, 'eat.poison_unaffected');
   } else if (rotted > 3 && ctx.rng.rn2(5) !== 0) {
     // (the original also tests rotted > 5, which the tainted branch above already took)
     // now any corpse left too long will make you mildly ill
@@ -449,12 +413,12 @@ function eatcorpse(ctx: Ctx, e: Entity, v: Victual): number {
 }
 
 /**
- * Effects of finishing a corpse. ref: src/eat.c cpostfx(). Not ported (no systems for them):
- * conveying intrinsics (poison resistance etc.), "a mild buzz" (the hero has no magic energy),
- * were-creatures, special monsters (none are in the roster).
+ * Effects of finishing a corpse: stun from bats and a chance at an intrinsic.
+ * ref: src/eat.c cpostfx(), see givit.ts for what is and is not ported.
  */
-function cpostfx(_ctx: Ctx, _corpse: Entity): void {
-  // intentionally empty for the current roster
+function cpostfx(ctx: Ctx, corpse: Entity): void {
+  const of = corpse.c.item?.corpseOf;
+  if (of && ctx.defs.isMonster(of)) cpostfxOf(ctx, ctx.defs.monster(of));
 }
 
 /** ref: src/eat.c cprefx(): nothing applies to the roster (no cannibalism, cockatrice, pets). */

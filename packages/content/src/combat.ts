@@ -13,7 +13,9 @@ import {
   type Pos,
   type Rng,
 } from '@nh/core';
+import { hitmuAd, mdamageu } from './mhitu';
 import { monsterDied } from './mondeath';
+import { passive, type PassiveTarget } from './uhitm_passive';
 import { xnameOf } from './objnam';
 import { stopOccupation } from './eat';
 import { experienceFor, gainExperience } from './hero';
@@ -186,7 +188,8 @@ function nonliving(def: MonsterDef): boolean {
 /**
  * The hero attacks the monster entity `targetId`; returns the energy cost.
  * ref: src/hack.c domove() -> src/uhitm.c do_attack() -> hitum() -> known_hitum() -> hmon().
- * Not ported: peaceful confirmation, knockback, passive attacks, two-weapon, skill training.
+ * The monster's passive attack answers each blow (ref: hitum() -> passive()). Not ported:
+ * peaceful confirmation, knockback, two-weapon, skill training.
  */
 export function heroAttack(ctx: Ctx, targetId: EntityId): number {
   const hero = getPlayer(ctx.state);
@@ -195,6 +198,14 @@ export function heroAttack(ctx: Ctx, targetId: EntityId): number {
   if (!target || !mon) throw new Error(`Entity ${targetId} is not a monster`);
   const def = ctx.defs.monster(target.def);
   const name = `@${target.def}`;
+  const snap: PassiveTarget | null = target.c.pos
+    ? { id: targetId, def, level: mon.level, pos: { ...target.c.pos } }
+    : null;
+  /** ref: src/uhitm.c hitum(): passive(mon, uwep, mhit, malive, AT_WEAP, ...) */
+  const answer = (mhit: boolean, malive: boolean): number => {
+    if (snap) passive(ctx, snap, mhit, malive);
+    return NORMAL_SPEED;
+  };
   const attrs = hero.c.attributes;
   const wielded = inventoryOf(ctx.state, hero.id).find((o) => o.c.item?.equipped === 'weapon');
   const wdef = wielded ? ctx.defs.object(wielded.def) : null;
@@ -221,7 +232,7 @@ export function heroAttack(ctx: Ctx, targetId: EntityId): number {
     // ref: src/uhitm.c missum(): "You miss <mon>." then wakeup(mdef, TRUE)
     ctx.emit({ type: 'msg', key: 'combat.you_miss', params: { mon: name } });
     wakeup(mon);
-    return NORMAL_SPEED;
+    return answer(false, true);
   }
 
   // ref: src/uhitm.c hmon_hitmon(): the base damage, then (if above 0) the Str bonus (3/2 of
@@ -276,7 +287,7 @@ export function heroAttack(ctx: Ctx, targetId: EntityId): number {
     });
     monsterDied(ctx, targetId, true);
     gainExperience(ctx, hero.id, experienceFor(def, mon.level));
-    return NORMAL_SPEED;
+    return answer(true, false);
   }
   // ref: src/uhitm.c hmon_hitmon_msg_hit(): "You hit <mon>" + exclam(dmg)
   ctx.emit({
@@ -285,7 +296,7 @@ export function heroAttack(ctx: Ctx, targetId: EntityId): number {
     params: { mon: name },
   });
   wakeup(mon);
-  return NORMAL_SPEED;
+  return answer(true, true);
 }
 
 /** ref: src/mon.c wakeup(mtmp, TRUE): wakes the monster and (setmangry) makes it hostile. */
@@ -400,7 +411,7 @@ export function monsterAttack(ctx: Ctx, monId: EntityId): void {
     }
     // ref: src/mhitu.c hitmu(): base damage d(damn, damd), then hitmsg()
     let dmg = ctx.rng.d(atk.n, atk.d);
-    if (atk.at === 'weapon' && mwep) {
+    if (atk.at === 'weapon' && mwep && atk.ad === 'phys') {
       // ref: src/uhitm.c mhitm_ad_phys() "hand to hand weapon": damage += dmgval(otmp, hero)
       dmg += dmgvalSized(ctx.rng, mwep, ctx.defs.object(mwep.def), false);
       if (dmg <= 0) dmg = 1;
@@ -412,24 +423,19 @@ export function monsterAttack(ctx: Ctx, monId: EntityId): void {
       params: { mon: name },
     });
     prevHit = i;
+    // ref: src/uhitm.c mhitm_adtyping(): the damage type's effect (resistances, sleep, poison, ...)
+    dmg = hitmuAd(ctx, mon, atk, dmg);
+    if (ctx.state.gameOver) {
+      stopOccupation(ctx);
+      return;
+    }
     // Negative armor class reduces damage done instead of fully protecting against hits.
     if (dmg > 0 && ac < 0) {
       dmg -= ctx.rng.rnd(-ac);
       if (dmg < 1) dmg = 1;
     }
-    hp.cur -= dmg;
+    if (dmg > 0) mdamageu(ctx, dmg, name); // ref: src/mhitu.c mdamageu() -> done_in_by()
     stopOccupation(ctx); // ref: stop_occupation() / nomul(0)
-    if (hp.cur < 1) {
-      // ref: src/mhitu.c mdamageu() -> src/end.c done_in_by(): "You die..."
-      ctx.emit({ type: 'msg', key: 'combat.you_die' });
-      ctx.endGame({
-        kind: 'died',
-        killer: `@${mon.def}`,
-        turn: ctx.state.turn,
-        depth: ctx.state.levels[ctx.state.currentLevel]?.depth ?? 1,
-        level: hero.c.experience?.level ?? 1,
-      });
-      return;
-    }
+    if (ctx.state.gameOver) return;
   }
 }

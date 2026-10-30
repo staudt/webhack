@@ -143,11 +143,10 @@ describe('nh:travel', () => {
   test('stops next to a hostile monster that comes into the neighbourhood, without attacking', () => {
     const { state, step } = setup(['@.........', '..........', '..........']);
     addNewt(state, step, 5, 1);
-    const hp = getPlayer(state).c.hp?.cur;
     step(go(9, 0));
     expect(posOf(state)).toEqual({ x: 4, y: 0 });
+    // the hero never attacked: the newt is untouched (it may still bite her)
     expect(state.entities[String(state.nextEntityId - 1)]?.c.hp?.cur).toBe(3);
-    expect(getPlayer(state).c.hp?.cur).toBe(hp);
   });
 
   test('a monster standing in the path cell stops travel without attacking', () => {

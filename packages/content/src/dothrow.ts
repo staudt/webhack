@@ -5,6 +5,8 @@ import {
   DIR_LIST,
   NORMAL_SPEED,
   inBounds,
+  isVisible,
+  shownId,
   type ActionDef,
   type Ctx,
   type DefId,
@@ -17,6 +19,7 @@ import {
   type ObjectDef,
   type Offer,
   type PlayerAction,
+  type Pos,
   type PromptOption,
 } from '@nh/core';
 import { dbon, dmgval, hitval, monsterIdAt } from './combat';
@@ -226,6 +229,7 @@ function throwit(ctx: Ctx, objId: EntityId, dir: Dir, shot: Shot): void {
   let x = pos.x;
   let y = pos.y;
   let hitMon: EntityId | null = null;
+  const path: Pos[] = []; // the cells of the flight the hero can see
   while (range-- > 0) {
     x += dx;
     y += dy;
@@ -234,18 +238,23 @@ function throwit(ctx: Ctx, objId: EntityId, dir: Dir, shot: Shot): void {
       y -= dy;
       break;
     }
-    const mid = monsterIdAt(ctx, { x, y }, pos.level);
-    if (mid !== null) {
-      hitMon = mid;
-      break;
-    }
     const t = ctx.defs.terrain(level.palette[level.cells[y * level.width + x] ?? 0] as DefId);
-    if (!t.passable || t.door === 'closed' || t.door === 'locked') {
+    const blocked = !t.passable || t.door === 'closed' || t.door === 'locked';
+    const mid = blocked ? null : monsterIdAt(ctx, { x, y }, pos.level);
+    if (blocked) {
       x -= dx;
       y -= dy;
       break;
     }
+    // ref: src/zap.c bhit() tmp_at(): the cell is drawn only when the hero can see it
+    if (isVisible(ctx.state, y * level.width + x)) path.push({ x, y });
+    if (mid !== null) {
+      hitMon = mid;
+      break;
+    }
   }
+  // ref: src/dothrow.c throwit() tmp_at(DISP_FLASH, obj_to_glyph(obj)); the UI animates it first
+  if (path.length > 0) ctx.emit({ type: 'projectile', g: shownId(ctx.state, obj.def), path });
 
   if (hitMon !== null) {
     if (thitmonst(ctx, hitMon, objId, shot)) return; // used up
