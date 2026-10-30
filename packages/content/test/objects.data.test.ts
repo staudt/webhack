@@ -60,10 +60,15 @@ describe('vanilla objects data', () => {
     const described = OBJECTS.filter((o) => o.descKey).map((o) => o.id);
     expect(described).toContain('nh:potion_of_water');
     expect(byId('nh:potion_of_healing').descKey).toBeUndefined();
-    for (const id of ['nh:potion_of_extra_healing', 'nh:potion_of_full_healing', 'nh:potion_of_see_invisible']) {
+    for (const id of [
+      'nh:potion_of_extra_healing',
+      'nh:potion_of_full_healing',
+      'nh:potion_of_see_invisible',
+    ]) {
       expect(byId(id).descKey, id).toBeUndefined();
     }
-    for (const o of OBJECTS.filter((d) => d.class === 'scroll')) expect(o.descKey, o.id).toBeUndefined();
+    for (const o of OBJECTS.filter((d) => d.class === 'scroll'))
+      expect(o.descKey, o.id).toBeUndefined();
   });
 
   test('dagger matches objects.h WEAPON("dagger", ...)', () => {
@@ -199,7 +204,9 @@ describe('vanilla objects data', () => {
 
   test('scroll appearances are labeled in upper case', () => {
     expect(objectMessagesEn['nh:scroll_labeled_zelgo_mer']).toBe('scroll labeled ZELGO MER');
-    expect(objectMessagesEn['nh:scroll_labeled_zelgo_mer.plural']).toBe('scrolls labeled ZELGO MER');
+    expect(objectMessagesEn['nh:scroll_labeled_zelgo_mer.plural']).toBe(
+      'scrolls labeled ZELGO MER',
+    );
   });
 
   test('potion appearances carry the color of their potion', () => {

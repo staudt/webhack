@@ -19,7 +19,6 @@ function statusOf(registry: Registry, state: GameState, depth: number): Status {
   const c = getPlayer(state).c;
   const status: Status = { dlvl: depth, turn: state.turn };
   if (c.hp) Object.assign(status, { hp: c.hp.cur, hpmax: c.hp.max });
-  if (c.gear) status.ac = c.gear.ac;
   if (c.experience) Object.assign(status, { xl: c.experience.level, xp: c.experience.points });
   if (c.attributes) Object.assign(status, c.attributes);
   if (state.gameOver) {

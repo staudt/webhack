@@ -31,7 +31,14 @@ export const OBJECTS: readonly ObjectDef[] = [
     merge: true,
     magic: false,
     delay: 0,
-    weapon: { small: [1, 4], large: [1, 3], hitBonus: 2, skill: 'dagger', bimanual: false, kind: 'pierce' },
+    weapon: {
+      small: [1, 4],
+      large: [1, 3],
+      hitBonus: 2,
+      skill: 'dagger',
+      bimanual: false,
+      kind: 'pierce',
+    },
   },
   // ref: objects.h WEAPON("elven dagger", "runed dagger", 0, 1, 0, 10, 10, 4, 5, 3, 2, P, P_DAGGER, WOOD, HI_WOOD, ELVEN_DAGGER)
   {
@@ -47,7 +54,14 @@ export const OBJECTS: readonly ObjectDef[] = [
     merge: true,
     magic: false,
     delay: 0,
-    weapon: { small: [1, 5], large: [1, 3], hitBonus: 2, skill: 'dagger', bimanual: false, kind: 'pierce' },
+    weapon: {
+      small: [1, 5],
+      large: [1, 3],
+      hitBonus: 2,
+      skill: 'dagger',
+      bimanual: false,
+      kind: 'pierce',
+    },
   },
   // ref: objects.h WEAPON("orcish dagger", "crude dagger", 0, 1, 0, 12, 10, 4, 3, 3, 2, P, P_DAGGER, IRON, CLR_BLACK, ORCISH_DAGGER)
   {
@@ -63,7 +77,14 @@ export const OBJECTS: readonly ObjectDef[] = [
     merge: true,
     magic: false,
     delay: 0,
-    weapon: { small: [1, 3], large: [1, 3], hitBonus: 2, skill: 'dagger', bimanual: false, kind: 'pierce' },
+    weapon: {
+      small: [1, 3],
+      large: [1, 3],
+      hitBonus: 2,
+      skill: 'dagger',
+      bimanual: false,
+      kind: 'pierce',
+    },
   },
   // ref: objects.h WEAPON("knife", NoDes, 1, 1, 0, 20, 5, 4, 3, 2, 0, P|S, P_KNIFE, IRON, HI_METAL, KNIFE)
   {
@@ -78,7 +99,14 @@ export const OBJECTS: readonly ObjectDef[] = [
     merge: true,
     magic: false,
     delay: 0,
-    weapon: { small: [1, 3], large: [1, 2], hitBonus: 0, skill: 'knife', bimanual: false, kind: 'pierce' },
+    weapon: {
+      small: [1, 3],
+      large: [1, 2],
+      hitBonus: 0,
+      skill: 'knife',
+      bimanual: false,
+      kind: 'pierce',
+    },
   },
   // ref: objects.h WEAPON("spear", NoDes, 1, 1, 0, 50, 30, 3, 6, 8, 0, P, P_SPEAR, IRON, HI_METAL, SPEAR)
   {
@@ -93,7 +121,14 @@ export const OBJECTS: readonly ObjectDef[] = [
     merge: true,
     magic: false,
     delay: 0,
-    weapon: { small: [1, 6], large: [1, 8], hitBonus: 0, skill: 'spear', bimanual: false, kind: 'pierce' },
+    weapon: {
+      small: [1, 6],
+      large: [1, 8],
+      hitBonus: 0,
+      skill: 'spear',
+      bimanual: false,
+      kind: 'pierce',
+    },
   },
   // ref: objects.h WEAPON("dwarvish spear", "stout spear", 0, 1, 0, 12, 35, 3, 8, 8, 0, P, P_SPEAR, IRON, HI_METAL, DWARVISH_SPEAR)
   {
@@ -109,7 +144,14 @@ export const OBJECTS: readonly ObjectDef[] = [
     merge: true,
     magic: false,
     delay: 0,
-    weapon: { small: [1, 8], large: [1, 8], hitBonus: 0, skill: 'spear', bimanual: false, kind: 'pierce' },
+    weapon: {
+      small: [1, 8],
+      large: [1, 8],
+      hitBonus: 0,
+      skill: 'spear',
+      bimanual: false,
+      kind: 'pierce',
+    },
   },
   // ref: objects.h WEAPON("short sword", NoDes, 1, 0, 0, 8, 30, 10, 6, 8, 0, P, P_SHORT_SWORD, IRON, HI_METAL, SHORT_SWORD)
   {
@@ -124,7 +166,14 @@ export const OBJECTS: readonly ObjectDef[] = [
     merge: false,
     magic: false,
     delay: 0,
-    weapon: { small: [1, 6], large: [1, 8], hitBonus: 0, skill: 'short_sword', bimanual: false, kind: 'pierce' },
+    weapon: {
+      small: [1, 6],
+      large: [1, 8],
+      hitBonus: 0,
+      skill: 'short_sword',
+      bimanual: false,
+      kind: 'pierce',
+    },
   },
   // ref: objects.h WEAPON("dwarvish short sword", "broad short sword", 0, 0, 0, 2, 30, 10, 7, 8, 0, P, P_SHORT_SWORD, IRON, HI_METAL, DWARVISH_SHORT_SWORD)
   {
@@ -140,7 +189,14 @@ export const OBJECTS: readonly ObjectDef[] = [
     merge: false,
     magic: false,
     delay: 0,
-    weapon: { small: [1, 7], large: [1, 8], hitBonus: 0, skill: 'short_sword', bimanual: false, kind: 'pierce' },
+    weapon: {
+      small: [1, 7],
+      large: [1, 8],
+      hitBonus: 0,
+      skill: 'short_sword',
+      bimanual: false,
+      kind: 'pierce',
+    },
   },
   // ref: objects.h WEAPON("scimitar", "curved sword", 0, 0, 0, 15, 40, 15, 8, 8, 0, S, P_SABER, IRON, HI_METAL, SCIMITAR)
   {
@@ -156,7 +212,14 @@ export const OBJECTS: readonly ObjectDef[] = [
     merge: false,
     magic: false,
     delay: 0,
-    weapon: { small: [1, 8], large: [1, 8], hitBonus: 0, skill: 'saber', bimanual: false, kind: 'slash' },
+    weapon: {
+      small: [1, 8],
+      large: [1, 8],
+      hitBonus: 0,
+      skill: 'saber',
+      bimanual: false,
+      kind: 'slash',
+    },
   },
   // ref: objects.h WEAPON("long sword", NoDes, 1, 0, 0, 50, 40, 15, 8, 12, 0, S, P_LONG_SWORD, IRON, HI_METAL, LONG_SWORD)
   {
@@ -171,7 +234,14 @@ export const OBJECTS: readonly ObjectDef[] = [
     merge: false,
     magic: false,
     delay: 0,
-    weapon: { small: [1, 8], large: [1, 12], hitBonus: 0, skill: 'long_sword', bimanual: false, kind: 'slash' },
+    weapon: {
+      small: [1, 8],
+      large: [1, 12],
+      hitBonus: 0,
+      skill: 'long_sword',
+      bimanual: false,
+      kind: 'slash',
+    },
   },
   // ref: objects.h WEAPON("axe", NoDes, 1, 0, 0, 40, 60, 8, 6, 4, 0, S, P_AXE, IRON, HI_METAL, AXE)
   {
@@ -186,7 +256,14 @@ export const OBJECTS: readonly ObjectDef[] = [
     merge: false,
     magic: false,
     delay: 0,
-    weapon: { small: [1, 6], large: [1, 4], hitBonus: 0, skill: 'axe', bimanual: false, kind: 'slash' },
+    weapon: {
+      small: [1, 6],
+      large: [1, 4],
+      hitBonus: 0,
+      skill: 'axe',
+      bimanual: false,
+      kind: 'slash',
+    },
   },
   // ref: objects.h WEAPON("dwarvish mattock", "broad pick", 0, 0, 1, 13, 120, 50, 12, 8, -1, B, P_PICK_AXE, IRON, HI_METAL, DWARVISH_MATTOCK)
   {
@@ -202,7 +279,14 @@ export const OBJECTS: readonly ObjectDef[] = [
     merge: false,
     magic: false,
     delay: 0,
-    weapon: { small: [1, 12], large: [1, 8], hitBonus: -1, skill: 'pick_axe', bimanual: true, kind: 'whack' },
+    weapon: {
+      small: [1, 12],
+      large: [1, 8],
+      hitBonus: -1,
+      skill: 'pick_axe',
+      bimanual: true,
+      kind: 'whack',
+    },
   },
   // ref: objects.h WEAPON("aklys", "thonged club", 0, 0, 0, 8, 15, 4, 6, 3, 0, B, P_CLUB, IRON, HI_METAL, AKLYS)
   {
@@ -218,7 +302,14 @@ export const OBJECTS: readonly ObjectDef[] = [
     merge: false,
     magic: false,
     delay: 0,
-    weapon: { small: [1, 6], large: [1, 3], hitBonus: 0, skill: 'club', bimanual: false, kind: 'whack' },
+    weapon: {
+      small: [1, 6],
+      large: [1, 3],
+      hitBonus: 0,
+      skill: 'club',
+      bimanual: false,
+      kind: 'whack',
+    },
   },
   // ref: objects.h WEAPON("mace", NoDes, 1, 0, 0, 40, 30, 5, 6, 6, 0, B, P_MACE, IRON, HI_METAL, MACE)
   {
@@ -233,7 +324,14 @@ export const OBJECTS: readonly ObjectDef[] = [
     merge: false,
     magic: false,
     delay: 0,
-    weapon: { small: [1, 6], large: [1, 6], hitBonus: 0, skill: 'mace', bimanual: false, kind: 'whack' },
+    weapon: {
+      small: [1, 6],
+      large: [1, 6],
+      hitBonus: 0,
+      skill: 'mace',
+      bimanual: false,
+      kind: 'whack',
+    },
   },
   // ref: objects.h WEAPON("club", NoDes, 1, 0, 0, 12, 30, 3, 6, 3, 0, B, P_CLUB, WOOD, HI_WOOD, CLUB)
   {
@@ -248,7 +346,14 @@ export const OBJECTS: readonly ObjectDef[] = [
     merge: false,
     magic: false,
     delay: 0,
-    weapon: { small: [1, 6], large: [1, 3], hitBonus: 0, skill: 'club', bimanual: false, kind: 'whack' },
+    weapon: {
+      small: [1, 6],
+      large: [1, 3],
+      hitBonus: 0,
+      skill: 'club',
+      bimanual: false,
+      kind: 'whack',
+    },
   },
 
   // ---- armor (ac = 10 - macro ac argument; mc = macro can argument; armor never merges) ----

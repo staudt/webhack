@@ -328,13 +328,13 @@ describe('inventory letters', () => {
     expect(letter(s, a)).toBe('b');
   });
 
-  test('a dropped item gets its old letter back when picked up and it is free', () => {
+  test('a dropped item keeps its letter and gets it back when picked up and it is free', () => {
     const s = bareState();
     const ctx = ctxFor(s);
     const a = give(ctx, 'nh:dagger');
     give(ctx, 'nh:knife');
     placeOnFloor(ctx, a, LEVEL, 1, 1);
-    expect(letter(s, a)).toBeNull();
+    expect(letter(s, a)).toBe('a'); // obj->invlet stays on the floor object
     // a different item takes the next letter after the last one assigned ('b' -> 'c')
     const c = give(ctx, 'nh:spear');
     expect(letter(s, c)).toBe('c');
@@ -350,8 +350,7 @@ describe('inventory letters', () => {
     removeFromInventory(ctx, a);
     const k = give(ctx, 'nh:knife'); // next after lastinvnr (a) is b
     expect(letter(s, k)).toBe('b');
-    ctx.state.entities[String(k)]!.c.item!.letter = 'a'; // force the clash
-    itemOf(s, k).letter = 'a';
+    itemOf(s, k).letter = 'a'; // force the clash
     expect(addToInventory(ctx, s.playerId, a)).toBe(a);
     expect(letter(s, a)).toBe('c');
   });
@@ -415,13 +414,13 @@ describe('floor stacking and splitting', () => {
     expect(itemOf(s, k).placed).toBeGreaterThan(placedA);
   });
 
-  test('picking up leaves the floor and putting down clears letter and slot', () => {
+  test('picking up leaves the floor and putting down clears the slot but keeps the letter', () => {
     const s = bareState();
     const ctx = ctxFor(s);
     const id = mksobj(ctx, obj('nh:dagger'), { init: false, carriedBy: s.playerId });
     itemOf(s, id).equipped = 'weapon';
     placeOnFloor(ctx, id, LEVEL, 5, 5);
-    expect(itemOf(s, id)).toMatchObject({ carriedBy: null, letter: null, equipped: null });
+    expect(itemOf(s, id)).toMatchObject({ carriedBy: null, letter: 'a', equipped: null });
     expect(s.entities[String(id)]?.c.pos).toEqual({ level: LEVEL, x: 5, y: 5 });
     expect(heroOf(s).c.item).toBeUndefined();
   });
@@ -442,7 +441,7 @@ describe('floor stacking and splitting', () => {
       quantity: 2,
       equipped: null,
       carriedBy: null,
-      letter: null,
+      letter: 'a', // a copy of the parent's, as in splitobj()
     });
     expect(itemOf(s, child).known.buc).toBe(true);
     expect(s.entities[String(child)]?.c.pos).toBeUndefined();

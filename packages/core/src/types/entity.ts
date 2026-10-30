@@ -41,19 +41,6 @@ export interface ExperienceComponent {
 /** Dice as [count, sides]. */
 export type Dice = [n: number, d: number];
 
-/** Milestone 2 stand-in for worn and wielded items (replaced by real objects in M3). */
-export interface GearComponent {
-  ac: number;
-  weapon: {
-    nameKey: string;
-    small: Dice;
-    large: Dice;
-    enchant: number;
-    /** Weapon-skill to-hit bonus (ref: src/weapon.c weapon_hit_bonus). */
-    skillBonus: number;
-  } | null;
-}
-
 export interface MonsterComponent {
   level: number;
   peaceful: boolean;
@@ -81,7 +68,7 @@ export interface ItemComponent {
   /** What the hero knows about this instance (obj->bknown, obj->known). */
   known: { buc: boolean; spe: boolean };
   carriedBy: EntityId | null;
-  /** Inventory letter; hero's items only. */
+  /** Inventory letter (hero's items). Kept on the floor so a picked-up item gets it back (obj->invlet). */
   letter: string | null;
   equipped: EquipSlot | null;
   /** Placement sequence (from `state.seq`); the highest on a cell is the top of the pile. */
@@ -96,13 +83,7 @@ export interface ItemComponent {
 
 /** ref: src/eat.c hunger states (u.uhs) */
 export type HungerState =
-  | 'satiated'
-  | 'not_hungry'
-  | 'hungry'
-  | 'weak'
-  | 'fainting'
-  | 'fainted'
-  | 'starved';
+  'satiated' | 'not_hungry' | 'hungry' | 'weak' | 'fainting' | 'fainted' | 'starved';
 
 export interface HungerComponent {
   /** u.uhunger */
@@ -125,7 +106,6 @@ export interface Components {
   hp?: HpComponent;
   attributes?: AttributesComponent;
   experience?: ExperienceComponent;
-  gear?: GearComponent;
   monster?: MonsterComponent;
   item?: ItemComponent;
   hunger?: HungerComponent;

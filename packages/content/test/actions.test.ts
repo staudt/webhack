@@ -213,15 +213,28 @@ describe('offers', () => {
 
   test('self offers wait and search with source nh', () => {
     const { q } = queryFor(['@']);
+    // plus the item actions that apply anywhere: drop several (the kit) and discoveries
     expect(q.actionsFor({ kind: 'self' })).toEqual([
       { action: { type: 'wait' }, labelKey: 'action.wait', source: 'nh' },
       { action: { type: 'search' }, labelKey: 'action.search', source: 'nh' },
+      {
+        action: { type: 'mod', action: 'nh:drop_many' },
+        labelKey: 'action.nh:drop_many',
+        source: 'nh',
+      },
+      {
+        action: { type: 'mod', action: 'nh:discoveries' },
+        labelKey: 'action.nh:discoveries',
+        source: 'nh',
+      },
     ]);
   });
 
   test('player entity maps to self', () => {
     const { state, q } = queryFor(['@']);
-    expect(q.actionsFor({ kind: 'entity', id: state.playerId })).toHaveLength(2);
+    expect(q.actionsFor({ kind: 'entity', id: state.playerId })).toEqual(
+      q.actionsFor({ kind: 'self' }),
+    );
   });
 
   test('each walkable adjacent cell offers a move', () => {

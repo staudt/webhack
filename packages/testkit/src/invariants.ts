@@ -107,8 +107,9 @@ export function checkInvariants(state: GameState, registry: Registry): string[] 
         if (other !== undefined) errs.push(`items ${other} and ${id} share letter ${k}`);
         else letters.set(k, id);
       }
-    } else if (item.equipped !== null || item.letter !== null) {
-      errs.push(`item ${id}: on the floor but equipped or lettered`);
+    } else if (item.equipped !== null) {
+      // A floor item may keep its last letter (obj->invlet), so it gets it back when picked up.
+      errs.push(`item ${id}: on the floor but equipped`);
     }
   }
 

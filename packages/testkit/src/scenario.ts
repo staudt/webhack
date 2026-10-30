@@ -316,8 +316,20 @@ export function runScenario(
         }
       }
       if (o.ac !== undefined) {
-        const g = (hero.c.gear ??= { ac: 10, weapon: null });
-        g.ac = o.ac;
+        // AC comes from worn armor now: shift the enchantment of the first worn piece so the
+        // total is `o.ac` (10 needs no armor at all, so any worn piece is adjusted to +0 effect).
+        const worn = sortedIds(state)
+          .map((id) => state.entities[String(id)])
+          .filter((e) => e?.c.item?.carriedBy === hero.id && e.c.item.equipped !== null)
+          .filter(
+            (e) => e && engine.registry.isObject(e.def) && engine.registry.object(e.def).armor,
+          );
+        let bonus = 0;
+        for (const e of worn)
+          bonus += (engine.registry.object(e?.def ?? 'x:y').armor?.ac ?? 0) + (e?.c.item?.spe ?? 0);
+        const first = worn[0]?.c.item;
+        if (first) first.spe += 10 - o.ac - bonus;
+        else if (o.ac !== 10) fail(`cannot set AC ${o.ac}: the hero wears no armor`);
       }
       if (o.level !== undefined) {
         const x = (hero.c.experience ??= { level: 1, points: 0 });

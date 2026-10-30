@@ -10,6 +10,7 @@ import {
   type ItemComponent,
   type LevelId,
   type MonsterDef,
+  type Msg,
   type ObjectDef,
   type Registry,
   type Rng,
@@ -254,17 +255,21 @@ export function merged(ctx: ItemCtx, into: Entity, obj: Entity): boolean {
 
 interface NhData {
   lastinvnr: number;
-  /** Letters items had when they left the hero's inventory, so they can get them back. */
-  letters: Record<string, string>;
+  /** Hero skill levels by skill name (ref: u.weapon_skills); absent = restricted. */
+  skills?: Record<string, number>;
+  /** The hero's last encumbrance level, for encumber_msg(). */
+  oldcap?: number;
+  /** Message shown when the current helplessness ends (ref: nomovemsg). */
+  nomovemsg?: Msg | null;
 }
 
 /** The content mod's persistent data (gl.lastinvnr and friends). */
-function nhData(ctx: Pick<ItemCtx, 'state'>): NhData {
+export function nhData(ctx: Pick<ItemCtx, 'state'>): NhData {
   const md = ctx.state.modData;
   let d = md['nh'] as unknown as NhData | undefined;
   if (typeof d !== 'object' || d === null || Array.isArray(d)) {
     // ref: src/nhlua.c: gl.lastinvnr = 51 -- the next letter tried is 'a'
-    d = { lastinvnr: 51, letters: {} };
+    d = { lastinvnr: 51 };
     md['nh'] = d as unknown as (typeof md)[string];
   }
   return d;
@@ -287,9 +292,9 @@ export const NOINVSYM = '#';
 /**
  * Gives `itemId` an inventory letter (it must not be in `owner`'s inventory yet or must be
  * excluded). ref: src/invent.c assigninvlet() with the default `fixinv`: coins are '$'; the
- * item's old letter is kept when free; otherwise the first free letter after the last one
- * assigned, cycling a-z then A-Z. The old letter is the item's own, or the one it had when it
- * left the inventory (kept in the nh mod data, since floor items carry no letter).
+ * item's old letter (obj->invlet, kept while it lay on the floor) is reused when free among
+ * the owner's items; otherwise the first free letter after the last one assigned, cycling a-z
+ * then A-Z.
  */
 export function assigninvlet(ctx: ItemCtx, owner: EntityId, itemId: EntityId): void {
   const item = ctx.state.entities[String(itemId)];
@@ -306,8 +311,7 @@ export function assigninvlet(ctx: ItemCtx, owner: EntityId, itemId: EntityId): v
     const i = letterIndex(o.c.item?.letter ?? null);
     if (i >= 0) inuse[i] = true;
   }
-  const want = it.letter ?? data.letters[String(itemId)] ?? null;
-  delete data.letters[String(itemId)];
+  const want = it.letter;
   const wi = letterIndex(want);
   if (wi >= 0 && !inuse[wi]) {
     it.letter = want;
@@ -347,24 +351,20 @@ export function addToInventory(ctx: ItemCtx, owner: EntityId, itemId: EntityId):
   it.carriedBy = owner;
   it.equipped = null;
   it.placed = ctx.state.seq++;
-  if (owner === ctx.state.playerId) {
-    it.letter = null;
-    assigninvlet(ctx, owner, itemId);
-  } else it.letter = null;
+  if (owner === ctx.state.playerId) assigninvlet(ctx, owner, itemId);
+  else it.letter = null;
   return itemId;
 }
 
 /**
  * Takes the item out of its carrier's inventory and leaves it detached (no place): the caller
  * must place it (placeOnFloor, addToInventory) or `ctx.remove` it. ref: src/invent.c freeinv().
- * Unequips it, and remembers the hero's letter so picking it up again restores it.
+ * Unequips it; it keeps its letter (obj->invlet) so picking it up again restores it if free.
  */
 export function removeFromInventory(ctx: ItemCtx, itemId: EntityId): void {
   const it = ctx.state.entities[String(itemId)]?.c.item;
   if (!it) return;
-  if (it.letter !== null && it.letter !== '$') nhData(ctx).letters[String(itemId)] = it.letter;
   it.carriedBy = null;
-  it.letter = null;
   it.equipped = null;
 }
 
@@ -384,7 +384,6 @@ export function placeOnFloor(
   const it = item?.c.item;
   if (!item || !it) throw new Error(`placeOnFloor: ${itemId} is not an item`);
   if (it.carriedBy !== null) removeFromInventory(ctx, itemId);
-  it.letter = null;
   it.equipped = null;
   delete item.c.pos;
   for (const other of itemsAt(ctx.defs, ctx.state, level, x, y)) {
@@ -410,16 +409,13 @@ export function splitStack(ctx: ItemCtx, itemId: EntityId, n: number): EntityId 
     known: { ...it.known },
     quantity: n,
     carriedBy: null,
-    letter: null,
     equipped: null,
     placed: ctx.state.seq++,
   };
   it.quantity -= n;
   const def = ctx.state.entities[String(itemId)]?.def;
   if (!def) throw new Error('splitStack: missing def');
-  const id = ctx.spawn({ def, c: { item: child } });
-  if (it.letter !== null && it.letter !== '$') nhData(ctx).letters[String(id)] = it.letter;
-  return id;
+  return ctx.spawn({ def, c: { item: child } });
 }
 
 /** Buc as a number: blessed +1, cursed -1. ref: src/mkobj.c bcsign() */

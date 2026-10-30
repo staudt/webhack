@@ -20,6 +20,7 @@ import {
   rnl,
 } from '@nh/core';
 import { heroAttack, monsterIdAt } from './combat';
+import { lookHere } from './itemactions';
 import { T } from './terrain';
 
 function playerAt(ctx: Ctx): Pos {
@@ -100,6 +101,7 @@ const move: ActionDef = {
       pos.x = to.x;
       pos.y = to.y;
       ctx.emit({ type: 'moved', id: player.id, from, to });
+      lookHere(ctx); // ref: src/hack.c spoteffects() -> pickup(1) -> check_here()
       return NORMAL_SPEED;
     }
     switch (check.reason) {

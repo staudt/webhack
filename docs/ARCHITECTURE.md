@@ -72,7 +72,6 @@ interface Components {
   hp?: { cur: number; max: number };
   attributes?: { str; int; wis; dex; con; cha }; // NetHack encoding; Str 18/xx stored as 19..118
   experience?: { level: number; points: number };
-  gear?: { ac: number; weapon: { nameKey; small: Dice; large: Dice; enchant; skillBonus } | null }; // M2 stand-in, removed in M3
   monster?: { level: number; peaceful: boolean; asleep: boolean; lastHero: Pos | null };
   item?: ItemComponent;
   hunger?: { nutrition: number; state: HungerState }; // u.uhunger, u.uhs

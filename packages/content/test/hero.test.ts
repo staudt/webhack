@@ -7,7 +7,7 @@ import {
   type MonsterDef,
 } from '@nh/core';
 import { describe, expect, test } from 'vitest';
-import { experienceFor, gainExperience, newuexp, vanillaMod } from '../src/index';
+import { experienceFor, findAc, gainExperience, newuexp, vanillaMod } from '../src/index';
 
 const engine = createEngine([vanillaMod]);
 const fresh = (seed: number): GameState => engine.newGame({ seed }).state;
@@ -66,15 +66,10 @@ describe('newGame hero', () => {
     expect(hp).toEqual({ cur: 16, max: 16 });
   });
 
-  test('AC 6, level 1, spear stand-in', () => {
-    const c = heroOf(fresh(7)).c;
-    expect(c.gear?.ac).toBe(6);
-    expect(c.gear?.weapon).toMatchObject({
-      small: [1, 6],
-      large: [1, 8],
-      enchant: 1,
-      skillBonus: 0,
-    });
+  test('AC 6 and level 1 from the real kit', () => {
+    const s = fresh(7);
+    const c = heroOf(s).c;
+    expect(findAc(s, engine.registry, s.playerId)).toBe(6);
     expect(c.experience).toEqual({ level: 1, points: 0 });
   });
 
@@ -238,7 +233,8 @@ describe('HP regeneration', () => {
     }
     const turns = 1000;
     for (let i = 0; i < turns; i++) {
-      for (const id of Object.keys(s.entities)) if (Number(id) !== s.playerId) delete s.entities[id];
+      for (const id of Object.keys(s.entities))
+        if (Number(id) !== s.playerId) delete s.entities[id];
       const before = hero.c.hp?.cur ?? 0;
       engine.step(s, { type: 'wait' });
       const after = hero.c.hp?.cur ?? 0;

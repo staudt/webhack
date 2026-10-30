@@ -26,6 +26,11 @@ function xname(state: Readonly<GameState>, defs: Registry, def: ObjectDef, item:
   return { key: `${base ?? def.descKey ?? def.nameKey}${plural}` };
 }
 
+/** The item's name without article, quantity, BUC or suffixes. ref: src/objnam.c xname() */
+export function xnameOf(state: Readonly<GameState>, defs: Registry, item: Entity): Msg {
+  return xname(state, defs, defs.object(item.def), item);
+}
+
 /**
  * The full item name, nested in the message `obj.doname` whose template joins the pieces:
  * `{count}{buc}{eaten}{spe}{name}{worn}`. Each piece is '' or carries its own spacing

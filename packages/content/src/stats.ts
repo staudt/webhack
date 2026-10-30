@@ -152,8 +152,6 @@ export function registerStats(api: ModApi): void {
     value(state, defs) {
       const hero = state.entities[String(state.playerId)];
       if (!hero) return null;
-      // The M2 stand-in gear keeps its own AC until it is removed; null would delete it.
-      if (hero.c.gear) return hero.c.gear.ac;
       return findAc(state, defs, hero.id);
     },
   });

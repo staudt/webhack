@@ -2,6 +2,7 @@ import {
   createEngine,
   getLevel,
   getPlayer,
+  inventoryOf,
   newMemory,
   type DefId,
   type EntityId,
@@ -10,17 +11,25 @@ import {
   type Level,
   type Mod,
   type Pos,
+  type Entity,
+  type ObjectDef,
 } from '@nh/core';
 import { describe, expect, test } from 'vitest';
 import {
   MONSTERS,
   T,
-  VALKYRIE_STARTING_GEAR,
   abon,
   acValue,
   dbon,
   dmgval,
   heroToHit,
+  hitval,
+  P_BASIC,
+  P_UNSKILLED,
+  P_SKILLED,
+  P_EXPERT,
+  weaponDamBonus,
+  weaponHitBonus,
   messagesEn,
   monsterAttack,
   monsterToHit,
@@ -32,8 +41,26 @@ const def = (id: string) => {
   if (!m) throw new Error(`missing ${id}`);
   return m;
 };
-const spear = VALKYRIE_STARTING_GEAR.weapon;
-if (!spear) throw new Error('no spear');
+const engine0 = createEngine([vanillaMod]);
+const odef = (id: string): ObjectDef => engine0.registry.object(id as never);
+/** A weapon entity (not placed anywhere) with the given enchantment. */
+const wep = (id: string, spe = 0): Entity => ({
+  id: 0,
+  def: id as DefId,
+  c: {
+    item: {
+      quantity: 1,
+      buc: 'uncursed',
+      spe,
+      known: { buc: true, spe: true },
+      carriedBy: null,
+      letter: null,
+      equipped: 'weapon',
+      placed: 0,
+    },
+  },
+});
+const SPEAR = { item: wep('nh:spear', 1), def: odef('nh:spear'), skill: P_BASIC };
 const STR_18_50 = 18 + 50;
 
 /** Test-only mod: an action that makes the monster in `target.id` attack the hero. */
@@ -92,12 +119,17 @@ function setup(seed: number, opts: { str?: number; dex?: number; ac?: number } =
   state.levels['dlvl1'] = level;
   state.memory['dlvl1'] = newMemory(level);
   const hero = getPlayer(state);
-  if (!hero.c.pos || !hero.c.attributes || !hero.c.gear) throw new Error('hero incomplete');
+  if (!hero.c.pos || !hero.c.attributes) throw new Error('hero incomplete');
   hero.c.pos.x = 3;
   hero.c.pos.y = 2;
   if (opts.str !== undefined) hero.c.attributes.str = opts.str;
   if (opts.dex !== undefined) hero.c.attributes.dex = opts.dex;
-  if (opts.ac !== undefined) hero.c.gear.ac = opts.ac;
+  if (opts.ac !== undefined) {
+    // AC comes from the worn +3 small shield (1 + spe): pick its enchantment for the wanted AC
+    const shield = inventoryOf(state, hero.id).find((o) => o.c.item?.equipped === 'shield');
+    if (!shield?.c.item) throw new Error('no shield');
+    shield.c.item.spe = 10 - opts.ac - 1;
+  }
   return { engine, state, level, hero };
 }
 
@@ -150,27 +182,72 @@ describe('formulas', () => {
 
   test('hero to-hit: Str 18/50 Dex 14 Valkyrie L1 with +1 spear', () => {
     const hero = { str: STR_18_50, dex: 14, level: 1 };
-    // 1 + abon 3 + AC 8 + level 1 + spe 1 = 14
-    expect(heroToHit(hero, def('nh:newt'), { asleep: false }, spear)).toBe(14);
+    // 1 + abon 3 + AC 8 + level 1 + spe 1 + Basic 0 = 14
+    expect(heroToHit(hero, def('nh:newt'), { asleep: false }, SPEAR)).toBe(14);
     // 1 + 3 + 3 + 1 + 1 = 9
-    expect(heroToHit(hero, def('nh:giant_ant'), { asleep: false }, spear)).toBe(9);
-    expect(heroToHit(hero, def('nh:newt'), { asleep: true }, spear)).toBe(16);
-    expect(heroToHit(hero, def('nh:newt'), { asleep: false }, { ...spear, skillBonus: -4 })).toBe(
-      10,
+    expect(heroToHit(hero, def('nh:giant_ant'), { asleep: false }, SPEAR)).toBe(9);
+    expect(heroToHit(hero, def('nh:newt'), { asleep: true }, SPEAR)).toBe(16);
+    // Unskilled: -4
+    expect(
+      heroToHit(hero, def('nh:newt'), { asleep: false }, { ...SPEAR, skill: P_UNSKILLED }),
+    ).toBe(10);
+    // bare-handed Unskilled: 13 + ((1 - 1) + 2) / 2 = 14
+    expect(heroToHit(hero, def('nh:newt'), { asleep: false }, null)).toBe(14);
+    // encumbrance: Burdened -1, Stressed -3
+    expect(heroToHit({ ...hero, encumbrance: 1 }, def('nh:newt'), { asleep: false }, SPEAR)).toBe(
+      13,
     );
-    expect(heroToHit(hero, def('nh:newt'), { asleep: false }, null)).toBe(14); // 13 + 1 bare-handed
+    expect(heroToHit({ ...hero, encumbrance: 2 }, def('nh:newt'), { asleep: false }, SPEAR)).toBe(
+      11,
+    );
   });
 
-  test('dmgval uses the large dice for large targets and clamps at 0', () => {
+  test('hitval: enchantment, the weapon hit bonus and the spear bonus on giants', () => {
+    // dagger oc_hitbon +2, mattock -1
+    expect(hitval(wep('nh:dagger', 0), odef('nh:dagger'), def('nh:newt'))).toBe(2);
+    expect(hitval(wep('nh:dagger', 3), odef('nh:dagger'), def('nh:newt'))).toBe(5);
+    expect(
+      hitval(wep('nh:dwarvish_mattock', -2), odef('nh:dwarvish_mattock'), def('nh:newt')),
+    ).toBe(-3);
+    expect(hitval(wep('nh:spear', 1), odef('nh:spear'), def('nh:newt'))).toBe(1);
+    const giant = { ...def('nh:newt'), glyph: { ch: 'H', fg: '#fff' } };
+    expect(hitval(wep('nh:spear', 1), odef('nh:spear'), giant)).toBe(3);
+    // a non-weapon contributes nothing
+    expect(hitval(wep('nh:food_ration', 5), odef('nh:food_ration'), def('nh:newt'))).toBe(0);
+  });
+
+  test('skill bonuses (weapon_hit_bonus / weapon_dam_bonus)', () => {
+    const sp = odef('nh:spear');
+    expect([0, 1, 2, 3, 4].map((l) => weaponHitBonus(l, sp))).toEqual([-4, -4, 0, 2, 3]);
+    expect([0, 1, 2, 3, 4].map((l) => weaponDamBonus(l, sp))).toEqual([-2, -2, 0, 1, 2]);
+    // bare hands: unskilled +1/0, basic +1/+1, skilled +2/+1, expert +2/+2
+    expect([P_UNSKILLED, P_BASIC, P_SKILLED, P_EXPERT].map((l) => weaponHitBonus(l, null))).toEqual(
+      [1, 1, 2, 2],
+    );
+    expect([P_UNSKILLED, P_BASIC, P_SKILLED, P_EXPERT].map((l) => weaponDamBonus(l, null))).toEqual(
+      [0, 1, 1, 2],
+    );
+    expect(weaponHitBonus(P_UNSKILLED, odef('nh:food_ration'))).toBe(0);
+  });
+
+  test('dmgval: dice by target size, special extras, enchantment, clamped at 0', () => {
     const rngFor = (v: number) => ({
       next: () => 0,
       rn2: () => 0,
       rnd: () => v,
-      d: (n: number, s: number) => (s === 8 ? 8 * n : s === 6 ? 6 * n : 0),
+      d: (n: number, s: number) => s * n, // maximum rolls
     });
-    expect(dmgval(rngFor(0), spear, def('nh:newt'))).toBe(7); // d6 max 6 + 1
-    expect(dmgval(rngFor(0), spear, def('nh:rothe'))).toBe(9); // d8 max 8 + 1
-    expect(dmgval(rngFor(0), { ...spear, enchant: -9 }, def('nh:newt'))).toBe(0);
+    const sp = odef('nh:spear');
+    expect(dmgval(rngFor(0), wep('nh:spear', 1), sp, def('nh:newt'))).toBe(7); // d6 max 6 + 1
+    expect(dmgval(rngFor(0), wep('nh:spear', 1), sp, def('nh:rothe'))).toBe(9); // d8 max 8 + 1
+    expect(dmgval(rngFor(0), wep('nh:spear', -9), sp, def('nh:newt'))).toBe(0);
+    // mace: d6 + 1 vs small only
+    expect(dmgval(rngFor(0), wep('nh:mace'), odef('nh:mace'), def('nh:newt'))).toBe(7);
+    expect(dmgval(rngFor(0), wep('nh:mace'), odef('nh:mace'), def('nh:rothe'))).toBe(6);
+    // dwarvish mattock: d12 vs small, d8 + 2d6 vs large
+    const mat = odef('nh:dwarvish_mattock');
+    expect(dmgval(rngFor(0), wep('nh:dwarvish_mattock'), mat, def('nh:newt'))).toBe(12);
+    expect(dmgval(rngFor(0), wep('nh:dwarvish_mattock'), mat, def('nh:rothe'))).toBe(8 + 12);
   });
 
   test('monster to-hit: level and AC, AC_VALUE for negative AC', () => {
@@ -199,7 +276,7 @@ describe('hero attacks', () => {
       const before = getPlayer(s.state).c.experience?.points ?? 0;
       const r = s.engine.step(s.state, { type: 'move', dir: 'e' });
       const m = msgs(r.events);
-      log.push(...m);
+      log.push(...m.filter((k) => k.startsWith('combat.you_'))); // the newt may bite back
       if (m.includes('combat.you_kill')) {
         kills++;
         expect(getPlayer(s.state).c.experience?.points).toBeGreaterThan(before);

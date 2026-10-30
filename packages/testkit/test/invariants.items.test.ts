@@ -74,7 +74,7 @@ describe('item invariants', () => {
 
   test('a carried item with a letter is fine', () => {
     const s = fresh();
-    add(s, { pos: false, carriedBy: s.playerId, letter: 'a' });
+    add(s, { pos: false, carriedBy: s.playerId, letter: 'y' });
     expect(errs(s)).toBe('');
   });
 
@@ -100,20 +100,20 @@ describe('item invariants', () => {
     const s = fresh();
     const mon = s.nextEntityId++;
     s.entities[String(mon)] = { id: mon, def: getPlayer(s).def, c: {} };
-    add(s, { pos: false, carriedBy: s.playerId, letter: 'a' });
-    add(s, { pos: false, carriedBy: mon, letter: 'a' });
+    add(s, { pos: false, carriedBy: s.playerId, letter: 'y' });
+    add(s, { pos: false, carriedBy: mon, letter: 'y' });
     expect(errs(s)).not.toMatch(/share letter/);
-    add(s, { pos: false, carriedBy: s.playerId, letter: 'a' });
+    add(s, { pos: false, carriedBy: s.playerId, letter: 'y' });
     expect(errs(s)).toMatch(/share letter/);
   });
 
-  test('floor item equipped or lettered', () => {
+  test('a floor item may keep its letter but not be equipped', () => {
     let s = fresh();
     add(s, { equipped: 'weapon' });
-    expect(errs(s)).toMatch(/floor but equipped or lettered/);
+    expect(errs(s)).toMatch(/floor but equipped/);
     s = fresh();
     add(s, { letter: 'b' });
-    expect(errs(s)).toMatch(/floor but equipped or lettered/);
+    expect(errs(s)).toBe('');
   });
 
   test.each([0, -1, 1.5])('quantity %s', (q) => {

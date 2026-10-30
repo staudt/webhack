@@ -142,7 +142,7 @@ describe('population', () => {
       const { state } = engine.newGame({ seed });
       const level = state.levels['dlvl1'];
       rooms += level?.rooms.length ?? 0;
-      mons += Object.keys(state.entities).filter((k) => Number(k) !== state.playerId).length;
+      mons += Object.values(state.entities).filter((e) => e.c.monster).length;
     }
     expect(Math.abs(mons / rooms - 1 / 3)).toBeLessThan(0.07);
   });

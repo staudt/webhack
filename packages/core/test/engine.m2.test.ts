@@ -598,11 +598,10 @@ describe('view additions', () => {
     expect(buildSnapshot(engine.registry, s).status).toEqual({ dlvl: 1, turn: s.turn });
   });
 
-  test('status includes hp, ac, xl, attributes when present', () => {
+  test('status includes hp, xl, attributes when present (AC comes from a mod status)', () => {
     const s = fresh();
     const c = getPlayer(s).c;
     c.hp = { cur: 7, max: 12 };
-    c.gear = { ac: 6, weapon: null };
     c.experience = { level: 3, points: 45 };
     c.attributes = { str: 18, int: 10, wis: 9, dex: 14, con: 12, cha: 8 };
     expect(buildSnapshot(engine.registry, s).status).toEqual({
@@ -610,7 +609,6 @@ describe('view additions', () => {
       turn: s.turn,
       hp: 7,
       hpmax: 12,
-      ac: 6,
       xl: 3,
       xp: 45,
       str: 18,

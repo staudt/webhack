@@ -77,10 +77,9 @@ describe('findAc', () => {
     expect(findMac(s, defs, id)).toBe(base - defs.object('nh:orcish_helm').armor!.ac);
   });
 
-  test('the ac status keeps the M2 stand-in value while the hero has gear', () => {
+  test('the starting kit gives AC 6 (10 - (1 + 3) for the +3 small shield)', () => {
     const s = freshState(1);
-    expect(hero(s).c.gear).toBeDefined();
-    expect(status('nh:ac').value(s, defs)).toBe(hero(s).c.gear!.ac);
+    expect(status('nh:ac').value(s, defs)).toBe(6);
   });
 });
 

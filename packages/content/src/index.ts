@@ -6,6 +6,8 @@ import { OBJECTS, APPEARANCES } from './objects';
 import { registerShuffle } from './o_init';
 import { nameItem } from './objnam';
 import { registerStats } from './stats';
+import { ITEM_ACTIONS } from './itemactions';
+import { registerNomul } from './nomul';
 import { registerHero } from './hero';
 import { ROLES } from './roles';
 import { TERRAIN } from './terrain';
@@ -22,6 +24,8 @@ export const vanillaMod: Mod = {
     for (const r of ROLES) api.defineRole(r);
     for (const a of ACTIONS) api.defineAction(a);
     for (const a of TRAVEL_ACTIONS) api.defineAction(a);
+    for (const a of ITEM_ACTIONS) api.defineAction(a);
+    registerNomul(api);
     for (const b of BRAINS) api.defineBrain(b);
     for (const m of MONSTERS) api.defineMonster(m);
     for (const o of OBJECTS) api.defineObject(o);
@@ -50,15 +54,27 @@ export {
   dbon,
   acValue,
 } from './combat';
-export {
-  experienceFor,
-  gainExperience,
-  newuexp,
-  newhp,
-  MAXULEV,
-  VALKYRIE_STARTING_GEAR,
-} from './hero';
+export { experienceFor, gainExperience, newuexp, newhp, MAXULEV } from './hero';
 export { messagesEn } from './messages.en';
+export { ITEM_ACTIONS, lookHere, encumberMsg } from './itemactions';
+export { nomul } from './nomul';
+export { giveStartingKit, VALKYRIE_KIT } from './kit';
+export {
+  skillInit,
+  skillLevel,
+  weaponHitBonus,
+  weaponDamBonus,
+  SKILL_V,
+  P_RESTRICTED,
+  P_UNSKILLED,
+  P_BASIC,
+  P_SKILLED,
+  P_EXPERT,
+  BARE_HANDED,
+} from './skills';
+export { xnameOf } from './objnam';
+export { hitval } from './combat';
+export { nhData } from './items';
 export { rndmonst, makemon, registerGeneration } from './generation';
 export { mcalcmove, clearPath, disturb, dochug, mfndpos } from './monmove';
 export { OBJECTS, APPEARANCES } from './objects';

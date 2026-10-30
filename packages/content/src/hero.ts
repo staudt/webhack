@@ -1,13 +1,6 @@
-// Hero stats for the stub Valkyrie: initial attributes/HP/gear, HP regeneration and experience.
-import type {
-  AttributesComponent,
-  Ctx,
-  Dice,
-  EntityId,
-  GearComponent,
-  ModApi,
-  MonsterDef,
-} from '@nh/core';
+// Hero stats for the stub Valkyrie: initial attributes/HP/kit, HP regeneration and experience.
+import type { AttributesComponent, Ctx, EntityId, ModApi, MonsterDef } from '@nh/core';
+import { giveStartingKit } from './kit';
 
 /**
  * The stub hero is a human, female, neutral Valkyrie. ref: src/role.c roles[] Valkyrie allows
@@ -43,25 +36,6 @@ const HUMAN_HPADV: HpAdvance = { infix: 2, inrnd: 0, lofix: 0, lornd: 2, hifix: 
 const VALK_XLEV = 10;
 /** ref: include/global.h MAXULEV */
 export const MAXULEV = 30;
-
-/**
- * M2 stand-in for the Valkyrie's starting items, replaced by real objects in M3.
- * ref: src/u_init.c Valkyrie[]: +1 spear (NetHack 5.0 -- the long sword of 3.4.3 is gone),
- * +0 dagger, +3 small shield, food ration. The spear is wielded (d6 small / d8 large, ref:
- * include/objects.h). The skill bonus is 0 because starting weapons are Basic (ref:
- * src/weapon.c weapon_hit_bonus P_BASIC). AC is 10 minus ARM_BONUS(small shield) =
- * a_ac 1 (objects.h: ac 9 -> 10 - 9) + spe 3, giving 6 (ref: src/do_wear.c find_ac).
- */
-export const VALKYRIE_STARTING_GEAR: GearComponent = {
-  ac: 10 - (1 + 3),
-  weapon: {
-    nameKey: 'weapon.spear',
-    small: [1, 6] as Dice,
-    large: [1, 8] as Dice,
-    enchant: 1,
-    skillBonus: 0,
-  },
-};
 
 /** ref: src/attrib.c rnd_attr() */
 function rndAttr(ctx: Ctx): number {
@@ -272,11 +246,8 @@ export function registerHero(api: ModApi): void {
     hero.c.attributes = attributes;
     hero.c.hp = { cur: max, max };
     hero.c.experience = { level: 1, points: 0 };
-    const w = VALKYRIE_STARTING_GEAR.weapon;
-    hero.c.gear = {
-      ac: VALKYRIE_STARTING_GEAR.ac,
-      weapon: w && { ...w, small: [...w.small], large: [...w.large] },
-    };
+    // ref: src/u_init.c u_init(): ini_inv(Valkyrie) and skill_init(Skill_V) after attributes and HP
+    giveStartingKit(ctx, heroId);
   });
   api.on('endOfTurn', regenHp);
 }
