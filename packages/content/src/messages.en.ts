@@ -24,9 +24,6 @@ export const messagesEn: Record<string, string> = {
   'terrain.stairs_up': 'staircase up',
   'terrain.stairs_down': 'staircase down',
   'role.valkyrie': 'Valkyrie',
-  'describe.unexplored': 'unexplored',
-  'describe.remembered': '{what} (remembered)',
-  'describe.you': 'you, a {role}',
   // Def ids double as display-name keys (the UI's look command translates '@' + def id).
   'nh:stone': 'stone',
   'nh:vwall': 'wall',
