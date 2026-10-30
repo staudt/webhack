@@ -39,13 +39,40 @@ export class ModLoadError extends Error {
   }
 }
 
-const HOOK_NAMES: readonly HookName[] = ['beforeAction', 'afterAction', 'endOfTurn', 'newGame', 'newLevel'];
+const HOOK_NAMES: readonly HookName[] = [
+  'beforeAction',
+  'afterAction',
+  'endOfTurn',
+  'newGame',
+  'newLevel',
+];
 const ACTION_TYPES: readonly ActionType[] = ['move', 'wait', 'search', 'answer', 'mod'];
 const ATTACK_TYPES: readonly AttackType[] = [
-  'claw', 'bite', 'kick', 'butt', 'touch', 'sting', 'hug', 'spit', 'engulf',
-  'breath', 'explode', 'boom', 'gaze', 'tentacle', 'weapon', 'magic',
+  'claw',
+  'bite',
+  'kick',
+  'butt',
+  'touch',
+  'sting',
+  'hug',
+  'spit',
+  'engulf',
+  'breath',
+  'explode',
+  'boom',
+  'gaze',
+  'tentacle',
+  'weapon',
+  'magic',
 ];
-const SIZES: readonly MonsterDef['size'][] = ['tiny', 'small', 'medium', 'large', 'huge', 'gigantic'];
+const SIZES: readonly MonsterDef['size'][] = [
+  'tiny',
+  'small',
+  'medium',
+  'large',
+  'huge',
+  'gigantic',
+];
 const MOD_ID = /^[a-z][a-z0-9_-]*$/;
 const DEF_NAME = /^[a-z][a-z0-9_-]*$/;
 
@@ -77,7 +104,8 @@ export function loadMods(mods: readonly Mod[]): Registry {
 
     if (!MOD_ID.test(modId)) issue('id', `mod id must match ${MOD_ID}`);
     if (loaded.some((m) => m.id === modId)) issue('id', 'duplicate mod id');
-    if (typeof mod.version !== 'string' || mod.version === '') issue('version', 'must be a non-empty string');
+    if (typeof mod.version !== 'string' || mod.version === '')
+      issue('version', 'must be a non-empty string');
     if (typeof mod.register !== 'function') issue('register', 'must be a function');
 
     for (const dep of mod.dependsOn ?? []) {
@@ -149,7 +177,8 @@ export function loadMods(mods: readonly Mod[]): Registry {
       defineRole(d) {
         if (!guard('defineRole') || !checkId(d.id, 'role')) return;
         str(d.nameKey, 'nameKey', d.id);
-        if (!Number.isInteger(d.speed) || d.speed <= 0) issue('speed', 'must be a positive integer', d.id);
+        if (!Number.isInteger(d.speed) || d.speed <= 0)
+          issue('speed', 'must be a positive integer', d.id);
         glyph(d.glyph, d.id);
         roles.set(d.id, d);
       },
@@ -162,7 +191,8 @@ export function loadMods(mods: readonly Mod[]): Registry {
           issue('handles', `must be one of ${ACTION_TYPES.join(', ')}`, d.id);
         } else if (d.handles !== 'mod') {
           const prev = builtinHandlers.get(d.handles);
-          if (prev !== undefined) issue('handles', `'${d.handles}' is already handled by ${prev}`, d.id);
+          if (prev !== undefined)
+            issue('handles', `'${d.handles}' is already handled by ${prev}`, d.id);
           else builtinHandlers.set(d.handles, d.id);
         }
         actions.push({ ...d, mod: modId });
@@ -182,10 +212,12 @@ export function loadMods(mods: readonly Mod[]): Registry {
         int(d.alignment, 'alignment', -128, 127);
         int(d.frequency, 'frequency', 0, 7);
         int(d.difficulty, 'difficulty', 0, 100);
-        if (!Array.isArray(d.attacks) || d.attacks.length > 6) issue('attacks', 'must be an array of at most 6 attacks', d.id);
+        if (!Array.isArray(d.attacks) || d.attacks.length > 6)
+          issue('attacks', 'must be an array of at most 6 attacks', d.id);
         else
           d.attacks.forEach((a, i) => {
-            if (!ATTACK_TYPES.includes(a.at)) issue(`attacks[${i}].at`, `must be one of ${ATTACK_TYPES.join(', ')}`, d.id);
+            if (!ATTACK_TYPES.includes(a.at))
+              issue(`attacks[${i}].at`, `must be one of ${ATTACK_TYPES.join(', ')}`, d.id);
             str(a.ad, `attacks[${i}].ad`, d.id);
             int(a.n, `attacks[${i}].n`, 0, 100);
             int(a.d, `attacks[${i}].d`, 0, 100);
@@ -193,7 +225,10 @@ export function loadMods(mods: readonly Mod[]): Registry {
         if (!SIZES.includes(d.size)) issue('size', `must be one of ${SIZES.join(', ')}`, d.id);
         if (d.group !== null && d.group !== 'small' && d.group !== 'large')
           issue('group', "must be 'small', 'large' or null", d.id);
-        for (const [k, v] of [['flags', d.flags], ['genFlags', d.genFlags]] as const)
+        for (const [k, v] of [
+          ['flags', d.flags],
+          ['genFlags', d.genFlags],
+        ] as const)
           if (!Array.isArray(v) || v.some((f) => typeof f !== 'string' || f === ''))
             issue(k, 'must be an array of non-empty strings', d.id);
         if (typeof d.brain !== 'string') issue('brain', 'must be a brain id', d.id);
@@ -247,7 +282,12 @@ export function loadMods(mods: readonly Mod[]): Registry {
       });
   for (const m of monsters.values())
     if (typeof m.brain === 'string' && !brains.has(m.brain))
-      issues.push({ modId: m.mod, defId: m.id, path: 'brain', reason: `unknown brain '${m.brain}'` });
+      issues.push({
+        modId: m.mod,
+        defId: m.id,
+        path: 'brain',
+        reason: `unknown brain '${m.brain}'`,
+      });
 
   if (issues.length > 0) throw new ModLoadError(issues);
 
@@ -258,7 +298,9 @@ export function loadMods(mods: readonly Mod[]): Registry {
   for (const name of HOOK_NAMES) {
     byName.set(
       name,
-      sortedHooks.filter((h) => h.name === name).map(({ mod, priority, fn }) => ({ mod, priority, fn })),
+      sortedHooks
+        .filter((h) => h.name === name)
+        .map(({ mod, priority, fn }) => ({ mod, priority, fn })),
     );
   }
   const terrainList = [...terrains.values()];
@@ -304,11 +346,20 @@ export function loadMods(mods: readonly Mod[]): Registry {
 }
 
 /** Throws a ModLoadError if any of `ids` is not a registered terrain. */
-export function requireTerrains(registry: Registry, ids: readonly DefId[], requiredBy: string): void {
+export function requireTerrains(
+  registry: Registry,
+  ids: readonly DefId[],
+  requiredBy: string,
+): void {
   const missing = ids.filter((id) => !registry.hasTerrain(id));
   if (missing.length > 0) {
     throw new ModLoadError(
-      missing.map((id) => ({ modId: requiredBy, defId: id, path: 'terrain', reason: 'required terrain is not registered' })),
+      missing.map((id) => ({
+        modId: requiredBy,
+        defId: id,
+        path: 'terrain',
+        reason: 'required terrain is not registered',
+      })),
     );
   }
 }

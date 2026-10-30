@@ -232,7 +232,11 @@ describe('timers', () => {
         handles: 'mod',
         offer: () => [],
         perform(ctx, a) {
-          const args = (a.type === 'mod' ? a.args : null) as { delay: number; kind: DefId; data: string };
+          const args = (a.type === 'mod' ? a.args : null) as {
+            delay: number;
+            kind: DefId;
+            data: string;
+          };
           ctx.schedule(args.delay, args.kind, args.data);
           return 0;
         },

@@ -51,8 +51,22 @@ export interface ActionDef {
 
 /** ref: include/monattk.h AT_* */
 export type AttackType =
-  | 'claw' | 'bite' | 'kick' | 'butt' | 'touch' | 'sting' | 'hug' | 'spit' | 'engulf'
-  | 'breath' | 'explode' | 'boom' | 'gaze' | 'tentacle' | 'weapon' | 'magic';
+  | 'claw'
+  | 'bite'
+  | 'kick'
+  | 'butt'
+  | 'touch'
+  | 'sting'
+  | 'hug'
+  | 'spit'
+  | 'engulf'
+  | 'breath'
+  | 'explode'
+  | 'boom'
+  | 'gaze'
+  | 'tentacle'
+  | 'weapon'
+  | 'magic';
 
 /** ref: include/monattk.h; only 'phys' damage is implemented in milestone 2. */
 export interface AttackDef {

@@ -76,7 +76,10 @@ describe('defineMonster validation', () => {
     ['alignment', { alignment: 128 }],
     ['frequency', { frequency: 8 }],
     ['difficulty', { difficulty: -1 }],
-    ['attacks', { attacks: Array.from({ length: 7 }, () => ({ at: 'claw', ad: 'phys', n: 1, d: 1 })) }],
+    [
+      'attacks',
+      { attacks: Array.from({ length: 7 }, () => ({ at: 'claw', ad: 'phys', n: 1, d: 1 })) },
+    ],
     ['attacks', { attacks: 'nope' }],
     ['attacks[0].at', { attacks: [{ at: 'lick', ad: 'phys', n: 1, d: 1 }] }],
     ['attacks[0].ad', { attacks: [{ at: 'claw', ad: '', n: 1, d: 1 }] }],
@@ -107,7 +110,9 @@ describe('defineMonster validation', () => {
 describe('defineBrain validation', () => {
   test('act must be a function', () => {
     const issues = issuesOf([mod('m', (api) => api.defineBrain(brain('b', { act: 1 })))]);
-    expect(issues).toEqual([{ modId: 'm', defId: 'm:b', path: 'act', reason: 'must be a function' }]);
+    expect(issues).toEqual([
+      { modId: 'm', defId: 'm:b', path: 'act', reason: 'must be a function' },
+    ]);
   });
 
   test('movement must be a function when present', () => {
@@ -116,7 +121,9 @@ describe('defineBrain validation', () => {
   });
 
   test('bad brain id', () => {
-    const issues = issuesOf([mod('m', (api) => api.defineBrain(bad<BrainDef>({ id: 'x:y', act: () => undefined })))]);
+    const issues = issuesOf([
+      mod('m', (api) => api.defineBrain(bad<BrainDef>({ id: 'x:y', act: () => undefined }))),
+    ]);
     expect(issues[0]?.path).toBe('id');
   });
 });

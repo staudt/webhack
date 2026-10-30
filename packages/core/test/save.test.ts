@@ -47,7 +47,9 @@ describe('save/load', () => {
   });
 
   test('wrong format', () => {
-    expect(() => engine.load(mutate((o) => (o['format'] = 'other')))).toThrow(`Not a ${SAVE_FORMAT} save`);
+    expect(() => engine.load(mutate((o) => (o['format'] = 'other')))).toThrow(
+      `Not a ${SAVE_FORMAT} save`,
+    );
   });
 
   test('wrong version', () => {
@@ -65,10 +67,18 @@ describe('save/load', () => {
   });
 
   test('mod list mismatch lists both sides', () => {
-    const other = createEngine([terrainMod(), actionsMod(), { id: 'zz', version: '2.0', register: () => undefined }]);
+    const other = createEngine([
+      terrainMod(),
+      actionsMod(),
+      { id: 'zz', version: '2.0', register: () => undefined },
+    ]);
     const text = other.save(other.newGame({ seed: 1 }).state, replay(1));
-    expect(() => engine.load(text)).toThrow('[nh@1.0.0, fk@1.0.0, zz@2.0] but the game has [nh@1.0.0, fk@1.0.0] loaded');
+    expect(() => engine.load(text)).toThrow(
+      '[nh@1.0.0, fk@1.0.0, zz@2.0] but the game has [nh@1.0.0, fk@1.0.0] loaded',
+    );
     const none = createEngine([terrainMod()]);
-    expect(() => engine.load(none.save(none.newGame({ seed: 1 }).state, replay(1)))).toThrow(/\[nh@1.0.0\]/);
+    expect(() => engine.load(none.save(none.newGame({ seed: 1 }).state, replay(1)))).toThrow(
+      /\[nh@1.0.0\]/,
+    );
   });
 });

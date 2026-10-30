@@ -41,7 +41,12 @@ describe('describe', () => {
     mem[j] = 1;
     state.visible = state.visible.filter((v) => v !== j);
     const d = q.describe({ x: j % level.width, y: Math.floor(j / level.width) });
-    expect(d).toEqual({ terrain: level.palette[1], remembered: true, visible: false, entities: [] });
+    expect(d).toEqual({
+      terrain: level.palette[1],
+      remembered: true,
+      visible: false,
+      entities: [],
+    });
   });
 
   test('visible cell with the player entity', () => {
@@ -58,7 +63,11 @@ describe('describe', () => {
     const { state, q } = game();
     state.entities['50'] = { id: 50, def: 'nh:hero', c: {} };
     const p = playerPos(state);
-    state.entities['51'] = { id: 51, def: 'nh:hero', c: { pos: { level: 'other', x: p.x, y: p.y } } };
+    state.entities['51'] = {
+      id: 51,
+      def: 'nh:hero',
+      c: { pos: { level: 'other', x: p.x, y: p.y } },
+    };
     expect(q.describe(p).entities).toHaveLength(1);
   });
 });
@@ -123,7 +132,13 @@ describe('pathTo', () => {
     const p = playerPos(state);
     const target = state.visible
       .map((i) => ({ x: i % level.width, y: Math.floor(i / level.width) }))
-      .find((c) => (c.x !== p.x || c.y !== p.y) && (mem[c.y * level.width + c.x] ?? -1) >= 0 && Math.max(Math.abs(c.x - p.x), Math.abs(c.y - p.y)) === 1 && level.palette[mem[c.y * level.width + c.x] ?? 0] === 'nh:floor');
+      .find(
+        (c) =>
+          (c.x !== p.x || c.y !== p.y) &&
+          (mem[c.y * level.width + c.x] ?? -1) >= 0 &&
+          Math.max(Math.abs(c.x - p.x), Math.abs(c.y - p.y)) === 1 &&
+          level.palette[mem[c.y * level.width + c.x] ?? 0] === 'nh:floor',
+      );
     expect(target).toBeDefined();
     if (target) expect(q.pathTo(target)).toEqual([target]);
     const unknown = mem.findIndex((m) => m === -1);

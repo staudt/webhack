@@ -93,7 +93,8 @@ const mmMod: Mod = {
     });
     api.on('newLevel', (_ctx, level) => void ctl.newLevels.push(level.id));
     api.on('afterAction', (ctx, a) => {
-      if (a.type === 'mod' && a.action === 'fk:walk' && ctl.walks === ctl.interruptAt) ctx.interrupt();
+      if (a.type === 'mod' && a.action === 'fk:walk' && ctl.walks === ctl.interruptAt)
+        ctx.interrupt();
     });
   },
 };
@@ -303,7 +304,10 @@ describe('turn loop with monsters', () => {
     for (let i = 0; i < 3; i++) engine.step(s, WAIT);
     expect(ctl.calls).toEqual([]);
     // Neither gained energy at end of turn either.
-    expect(Object.values(s.entities).filter((e) => e.def === 'nh:hero' && e.id !== s.playerId)[0]?.c.actor?.energy).toBe(100);
+    expect(
+      Object.values(s.entities).filter((e) => e.def === 'nh:hero' && e.id !== s.playerId)[0]?.c
+        .actor?.energy,
+    ).toBe(100);
     expect(Object.values(s.entities).find((e) => e.def === 'mm:mon')?.c.actor?.energy).toBe(100);
   });
 
@@ -461,14 +465,24 @@ describe('prompts', () => {
   });
 
   test('ask with a handler lacking answer() throws', () => {
-    expect(() => engine.step(fresh(), mod('fk:noans'))).toThrow("Prompt handler 'fk:noans' has no answer()");
-    expect(() => engine.step(fresh(), mod('fk:badask'))).toThrow("Prompt handler 'fk:missing' has no answer()");
+    expect(() => engine.step(fresh(), mod('fk:noans'))).toThrow(
+      "Prompt handler 'fk:noans' has no answer()",
+    );
+    expect(() => engine.step(fresh(), mod('fk:badask'))).toThrow(
+      "Prompt handler 'fk:missing' has no answer()",
+    );
   });
 
   test('pending prompt whose handler lost its answer() throws on answer', () => {
     const s = fresh();
-    s.pendingPrompt = { prompt: { id: 'q', kind: 'yn', key: 'k' }, handler: 'fk:noans', data: null };
-    expect(() => engine.step(s, { type: 'answer', promptId: 'q', value: 1 })).toThrow('has no answer()');
+    s.pendingPrompt = {
+      prompt: { id: 'q', kind: 'yn', key: 'k' },
+      handler: 'fk:noans',
+      data: null,
+    };
+    expect(() => engine.step(s, { type: 'answer', promptId: 'q', value: 1 })).toThrow(
+      'has no answer()',
+    );
   });
 });
 

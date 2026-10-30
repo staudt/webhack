@@ -1,7 +1,8 @@
 import type { DefId, EntityId, Params, Pos } from './common';
 import type { PlayerAction } from './action';
 
-export type Target = { kind: 'self' } | { kind: 'cell'; pos: Pos } | { kind: 'entity'; id: EntityId };
+export type Target =
+  { kind: 'self' } | { kind: 'cell'; pos: Pos } | { kind: 'entity'; id: EntityId };
 
 export interface ActionOffer {
   action: PlayerAction;

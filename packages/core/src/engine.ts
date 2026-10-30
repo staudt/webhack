@@ -60,7 +60,13 @@ export function createEngine(mods: readonly Mod[], opts: EngineOptions = {}): En
   const terrain = opts.terrain ?? VANILLA_TERRAIN;
   requireTerrains(registry, Object.values(terrain), 'levelgen');
 
-  const occupied = (state: GameState, level: Level, x: number, y: number, except: number): boolean =>
+  const occupied = (
+    state: GameState,
+    level: Level,
+    x: number,
+    y: number,
+    except: number,
+  ): boolean =>
     sortedIds(state).some((id) => {
       const p = state.entities[String(id)]?.c.pos;
       return id !== except && p !== undefined && p.level === level.id && p.x === x && p.y === y;
@@ -114,7 +120,8 @@ export function createEngine(mods: readonly Mod[], opts: EngineOptions = {}): En
         delete state.entities[String(id)];
       },
       goToLevel(depth, at) {
-        if (!Number.isInteger(depth) || depth < 1) throw new RangeError(`Bad dungeon depth ${depth}`);
+        if (!Number.isInteger(depth) || depth < 1)
+          throw new RangeError(`Bad dungeon depth ${depth}`);
         const id = levelId(depth);
         const current = getLevel(state);
         let level = state.levels[id];

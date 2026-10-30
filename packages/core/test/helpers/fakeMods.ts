@@ -9,13 +9,24 @@ const GLYPH = { ch: '.', fg: '#fff' };
 const OPEN = new Set<string>(['door_open_v', 'door_open_h']);
 
 /** A mod 'nh' that defines the 15 terrain ids the level generator needs. Core tests must not import @nh/content. */
-export function terrainMod(roles: { id: DefId; speed: number }[] = [{ id: 'nh:hero', speed: 12 }]): Mod {
+export function terrainMod(
+  roles: { id: DefId; speed: number }[] = [{ id: 'nh:hero', speed: 12 }],
+): Mod {
   return {
     id: 'nh',
     version: '1.0.0',
     register(api) {
       for (const [name, id] of Object.entries(VANILLA_TERRAIN)) {
-        const solid = ['stone', 'vwall', 'hwall', 'tlcorn', 'trcorn', 'blcorn', 'brcorn', 'door_closed'].includes(name);
+        const solid = [
+          'stone',
+          'vwall',
+          'hwall',
+          'tlcorn',
+          'trcorn',
+          'blcorn',
+          'brcorn',
+          'door_closed',
+        ].includes(name);
         const def: TerrainDef = {
           id,
           nameKey: `terrain.${name}`,
@@ -31,7 +42,12 @@ export function terrainMod(roles: { id: DefId; speed: number }[] = [{ id: 'nh:he
         api.defineTerrain(def);
       }
       for (const r of roles) {
-        api.defineRole({ id: r.id, nameKey: `role.${r.id.split(':')[1] ?? ''}`, speed: r.speed, glyph: GLYPH });
+        api.defineRole({
+          id: r.id,
+          nameKey: `role.${r.id.split(':')[1] ?? ''}`,
+          speed: r.speed,
+          glyph: GLYPH,
+        });
       }
     },
   };
@@ -85,6 +101,7 @@ export function actionsMod(extra: (api: ModApi) => void = () => undefined): Mod 
   };
 }
 
-export const costAction = (cost: number) => ({ type: 'mod', action: 'fk:cost', args: { cost } }) as const;
+export const costAction = (cost: number) =>
+  ({ type: 'mod', action: 'fk:cost', args: { cost } }) as const;
 
 export type EventLog = GameEvent[];

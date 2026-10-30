@@ -79,7 +79,7 @@ export function rnl(rng: Rng, x: number, luck = 0): number {
   let adjustment = luck;
   if (x <= 15) {
     // for small ranges, use Luck/3 (rounded away from 0)
-    adjustment = (Math.floor((Math.abs(adjustment) + 1) / 3)) * Math.sign(adjustment);
+    adjustment = Math.floor((Math.abs(adjustment) + 1) / 3) * Math.sign(adjustment);
   }
   let i = rng.rn2(x);
   if (adjustment !== 0 && rng.rn2(37 + Math.abs(adjustment)) !== 0) {

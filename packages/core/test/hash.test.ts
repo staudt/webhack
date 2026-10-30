@@ -29,7 +29,19 @@ describe('hash', () => {
 
   test('throws on non-JSON values', () => {
     class Foo {}
-    for (const v of [new Map(), new Set(), () => 1, NaN, Infinity, [undefined], new Foo(), 1n, undefined, Symbol('s'), { a: [new Foo()] }]) {
+    for (const v of [
+      new Map(),
+      new Set(),
+      () => 1,
+      NaN,
+      Infinity,
+      [undefined],
+      new Foo(),
+      1n,
+      undefined,
+      Symbol('s'),
+      { a: [new Foo()] },
+    ]) {
       expect(() => canonicalJson(v)).toThrow(TypeError);
     }
   });

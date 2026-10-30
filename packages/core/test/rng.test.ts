@@ -3,7 +3,9 @@ import { describe, expect, test } from 'vitest';
 import { createRng, newRngStates, rnl, seedRng } from '../src/rng';
 
 const GOLDEN: Record<number, number[]> = {
-  42: [1028872839, 2516511472, 400437680, 853279530, 1920286840, 3588795744, 3644712829, 3990689672],
+  42: [
+    1028872839, 2516511472, 400437680, 853279530, 1920286840, 3588795744, 3644712829, 3990689672,
+  ],
   0: [4205396811, 3543653536, 1222415357, 3047368389, 387095348, 2506032770, 735102004, 4023218824],
 };
 
@@ -17,7 +19,10 @@ function refSequence(seed: number, n: number): number[] {
     z = Math.imul(z ^ (z >>> 13), 0xc2b2ae35);
     return (z ^ (z >>> 16)) >>> 0;
   };
-  let a = sm(), b = sm(), c = sm(), d = sm();
+  let a = sm(),
+    b = sm(),
+    c = sm(),
+    d = sm();
   const step = (): number => {
     const t = (((a + b) | 0) + d) | 0;
     d = (d + 1) | 0;
@@ -160,7 +165,8 @@ describe('rnl (ref: src/rnd.c rnl)', () => {
           const r = createRng(seedRng(seed));
           for (let i = 0; i < 20; i++) {
             const v = rnl(r, x, luck);
-            if (!Number.isInteger(v) || v < 0 || v >= x) throw new Error(`out of range ${String(v)}`);
+            if (!Number.isInteger(v) || v < 0 || v >= x)
+              throw new Error(`out of range ${String(v)}`);
           }
         },
       ),

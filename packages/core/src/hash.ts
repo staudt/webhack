@@ -69,5 +69,8 @@ function cyrb53(str: string, seed: number): number {
 /** 28-hex-char hash of the canonical JSON of v. */
 export function stateHash(v: unknown): string {
   const s = canonicalJson(v);
-  return cyrb53(s, 0).toString(16).padStart(14, '0') + cyrb53(s, 0x5bd1e995).toString(16).padStart(14, '0');
+  return (
+    cyrb53(s, 0).toString(16).padStart(14, '0') +
+    cyrb53(s, 0x5bd1e995).toString(16).padStart(14, '0')
+  );
 }

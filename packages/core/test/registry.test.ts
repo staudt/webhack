@@ -468,7 +468,8 @@ describe('hook validation', () => {
       {
         modId: 'm',
         path: "on('nope')",
-        reason: 'unknown hook; expected one of beforeAction, afterAction, endOfTurn, newGame, newLevel',
+        reason:
+          'unknown hook; expected one of beforeAction, afterAction, endOfTurn, newGame, newLevel',
       },
     ]);
   });
@@ -594,7 +595,9 @@ describe('timers', () => {
 
   test('defineTimer validates fire', () => {
     const issues = one((api) => api.defineTimer({ id: id('m:t'), fire: bad(42) }));
-    expect(issues).toEqual([{ modId: 'm', defId: 'm:t', path: 'fire', reason: 'must be a function' }]);
+    expect(issues).toEqual([
+      { modId: 'm', defId: 'm:t', path: 'fire', reason: 'must be a function' },
+    ]);
   });
 
   test('defineTimer validates the id namespace', () => {

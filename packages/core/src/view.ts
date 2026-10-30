@@ -2,7 +2,14 @@ import { getLevel, getPlayer } from './state';
 import type { DefId, Glyph } from './types/common';
 import type { Registry } from './types/mod';
 import type { GameState } from './types/state';
-import type { Status, ViewCell, ViewDelta, ViewEntity, ViewSnapshot, ViewUpdate } from './types/view';
+import type {
+  Status,
+  ViewCell,
+  ViewDelta,
+  ViewEntity,
+  ViewSnapshot,
+  ViewUpdate,
+} from './types/view';
 import { sortedIds } from './util';
 
 /** Bottom-line values (ref: src/botl.c); absent components are simply left out. */
@@ -15,7 +22,13 @@ function statusOf(state: GameState, depth: number): Status {
   if (c.attributes) Object.assign(status, c.attributes);
   if (state.gameOver) {
     const g = state.gameOver;
-    Object.assign(status, { dead: g.kind, killer: g.killer, endTurn: g.turn, endDepth: g.depth, endLevel: g.level });
+    Object.assign(status, {
+      dead: g.kind,
+      killer: g.killer,
+      endTurn: g.turn,
+      endDepth: g.depth,
+      endLevel: g.level,
+    });
   }
   return status;
 }
