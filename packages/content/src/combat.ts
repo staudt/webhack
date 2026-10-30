@@ -13,7 +13,10 @@ import {
   type Pos,
   type Rng,
 } from '@nh/core';
+import { xkilledCorpse } from './corpses';
+import { stopOccupation } from './eat';
 import { experienceFor, gainExperience } from './hero';
+import { gethungry } from './hunger';
 import { weight } from './items';
 import { findAc, findMac, nearCapacity } from './stats';
 import { P_UNSKILLED, BARE_HANDED, skillLevel, weaponDamBonus, weaponHitBonus } from './skills';
@@ -193,6 +196,10 @@ export function heroAttack(ctx: Ctx, targetId: EntityId): number {
     wielded && wdef
       ? { item: wielded, def: wdef, skill: skillLevel(ctx, wdef.weapon?.skill ?? '') }
       : null;
+  // ref: src/uhitm.c do_attack() -> src/hack.c overexertion(): combat increases metabolism, and
+  // the hero may faint from it, which cancels the attack. (The HVY_ENCUMBER HP loss is not ported.)
+  gethungry(ctx);
+  if (hero.c.helpless || ctx.state.gameOver) return NORMAL_SPEED;
   const stats: HeroCombatStats = {
     str: attrs?.str ?? 10,
     dex: attrs?.dex ?? 10,
@@ -261,7 +268,9 @@ export function heroAttack(ctx: Ctx, targetId: EntityId): number {
       key: nonliving(def) ? 'combat.you_destroy' : 'combat.you_kill',
       params: { mon: name },
     });
+    const at = target.c.pos;
     ctx.remove(targetId);
+    if (at) xkilledCorpse(ctx, def, at);
     gainExperience(ctx, hero.id, experienceFor(def, mon.level));
     return NORMAL_SPEED;
   }
@@ -286,9 +295,15 @@ function wakeup(mon: { asleep: boolean; peaceful: boolean }): void {
  * ref: src/mhitu.c mattacku(): tmp = AC_VALUE(u.uac) + 10; tmp += m_lev; if (tmp <= 0) tmp = 1.
  * (Hero not helpless, not invisible, monster can see and is not trapped.)
  */
-export function monsterToHit(rng: Rng, heroAc: number, monLevel: number): number {
+export function monsterToHit(
+  rng: Rng,
+  heroAc: number,
+  monLevel: number,
+  heroHelpless = false,
+): number {
   let tmp = acValue(rng, heroAc) + 10;
   tmp += monLevel;
+  if (heroHelpless) tmp += 4; // multi < 0
   if (tmp <= 0) tmp = 1;
   return tmp;
 }
@@ -336,7 +351,7 @@ export function monsterAttack(ctx: Ctx, monId: EntityId): void {
   const def = ctx.defs.monster(mon.def);
   const name = `@${mon.def}`;
   const ac = findAc(ctx.state, ctx.defs, hero.id);
-  const tmp = monsterToHit(ctx.rng, ac, m.level);
+  const tmp = monsterToHit(ctx.rng, ac, m.level, hero.c.helpless !== undefined);
 
   let prevHit = -1; // index of the previous attack if it hit (ref: hitmsg_prev)
   for (let i = 0; i < def.attacks.length; i++) {
@@ -368,7 +383,7 @@ export function monsterAttack(ctx: Ctx, monId: EntityId): void {
       if (dmg < 1) dmg = 1;
     }
     hp.cur -= dmg;
-    ctx.interrupt(); // ref: stop_occupation() / nomul(0)
+    stopOccupation(ctx); // ref: stop_occupation() / nomul(0)
     if (hp.cur < 1) {
       // ref: src/mhitu.c mdamageu() -> src/end.c done_in_by(): "You die..."
       ctx.emit({ type: 'msg', key: 'combat.you_die' });

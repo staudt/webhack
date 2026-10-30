@@ -183,7 +183,8 @@ export function createUi(opts: UiOptions): Ui {
     if (died) {
       const k = String(s['killer'] ?? '');
       const def = k.startsWith('@') ? k.slice(1) : k;
-      const killer = def ? an(t(def)) : '';
+      // Monster killers take an article ("a jackal"); 'killer.*' phrases are complete ("starvation").
+      const killer = !def ? '' : def.startsWith('killer.') ? t(def) : an(t(def));
       const lines = [
         t('ui.rip.rest'),
         ...(killer ? [t('ui.rip.killed_by', { killer })] : []),

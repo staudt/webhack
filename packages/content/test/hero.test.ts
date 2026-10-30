@@ -232,6 +232,7 @@ describe('HP regeneration', () => {
       hero.c.hp.cur = 1;
     }
     const turns = 1000;
+    if (hero.c.hunger) hero.c.hunger.nutrition = 2000; // do not starve during the 1000 turns
     for (let i = 0; i < turns; i++) {
       for (const id of Object.keys(s.entities))
         if (Number(id) !== s.playerId) delete s.entities[id];

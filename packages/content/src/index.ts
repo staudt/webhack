@@ -8,11 +8,20 @@ import { nameItem } from './objnam';
 import { registerStats } from './stats';
 import { ITEM_ACTIONS } from './itemactions';
 import { registerNomul } from './nomul';
+import { EAT_ACTIONS } from './eat';
+import { registerHunger } from './hunger';
+import { registerCorpses } from './corpses';
 import { registerHero } from './hero';
 import { ROLES } from './roles';
 import { TERRAIN } from './terrain';
 import { TRAVEL_ACTIONS } from './travel';
 import { registerGeneration } from './generation';
+import { POTION_ACTIONS, POTION_USES } from './potion';
+import { READ_ACTIONS, SCROLL_USES } from './read';
+import { THROW_ACTIONS } from './dothrow';
+
+/** Potion and scroll effects, attached to the object defs (ObjectDef.use). */
+const USES = { ...POTION_USES, ...SCROLL_USES };
 
 export const CONTENT_VERSION = 1;
 
@@ -25,10 +34,19 @@ export const vanillaMod: Mod = {
     for (const a of ACTIONS) api.defineAction(a);
     for (const a of TRAVEL_ACTIONS) api.defineAction(a);
     for (const a of ITEM_ACTIONS) api.defineAction(a);
+    for (const a of POTION_ACTIONS) api.defineAction(a);
+    for (const a of READ_ACTIONS) api.defineAction(a);
+    for (const a of THROW_ACTIONS) api.defineAction(a);
     registerNomul(api);
+    for (const a of EAT_ACTIONS) api.defineAction(a);
+    registerCorpses(api);
+    registerHunger(api);
     for (const b of BRAINS) api.defineBrain(b);
     for (const m of MONSTERS) api.defineMonster(m);
-    for (const o of OBJECTS) api.defineObject(o);
+    for (const o of OBJECTS) {
+      const use = USES[o.id];
+      api.defineObject(use ? { ...o, use } : o);
+    }
     for (const a of APPEARANCES) api.defineAppearance(a);
     api.setItemNamer(nameItem);
     registerStats(api);
@@ -110,3 +128,19 @@ export {
   heroMovement,
   ENCUMBRANCE_NAMES,
 } from './stats';
+export { healup, cureSick, POTION_ACTIONS } from './potion';
+export { READ_ACTIONS } from './read';
+export { THROW_ACTIONS } from './dothrow';
+export {
+  gethungry,
+  newuhs,
+  lesshungry,
+  morehungry,
+  makeSick,
+  makeVomiting,
+  vomit,
+  isSick,
+  hungerData,
+} from './hunger';
+export { EAT_ACTIONS, stopOccupation, losehp } from './eat';
+export { xkilledCorpse, corpseChance, startCorpseTimeout, rnz, ROT_AGE } from './corpses';

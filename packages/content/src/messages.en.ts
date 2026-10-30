@@ -1,10 +1,14 @@
 // English message text. Keys are referenced by core events; `{param}` placeholders are filled from event params.
 import { objectMessagesEn } from './objects.en';
 import { itemMessagesEn } from './items.en';
+import { magicMessagesEn } from './magic.en';
+import { eatMessagesEn } from './eat.en';
 
 export const messagesEn: Record<string, string> = {
   ...objectMessagesEn,
   ...itemMessagesEn,
+  ...magicMessagesEn,
+  ...eatMessagesEn,
   welcome: 'Hello, welcome to webhack! You are a {role}.',
   'welcome.back': 'Hello, welcome back to webhack! You are a {role}.',
   'door.opens': 'The door opens.',

@@ -520,7 +520,7 @@ describe('wear and take off', () => {
         .query(s.state)
         .actionsFor({ kind: 'item', id: shield })
         .map((o) => o.labelKey),
-    ).toEqual(['action.nh:drop', 'action.nh:wear']);
+    ).toEqual(['action.nh:drop', 'action.nh:wear', 'action.nh:throw']);
     expect(s.text(s.mod('nh:wear', { item: shield }))).toEqual([
       'You are now wearing a small shield.',
     ]);

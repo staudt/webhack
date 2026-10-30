@@ -409,6 +409,7 @@ describe('status bar, tombstone, tap to act', () => {
   test.each([
     ['nh:jackal', 'killed by a jackal'],
     ['@nh:iguana', 'killed by an iguana'],
+    ['@killer.starvation', 'killed by starvation'],
   ])('tombstone for %s', (killer, text) => {
     const onNewGame = vi.fn();
     const root = document.createElement('div');
@@ -421,7 +422,11 @@ describe('status bar, tombstone, tap to act', () => {
       mods: [defaultKeymap],
       onNewGame,
     });
-    ui.api.addMessages('en', { 'nh:jackal': 'jackal', 'nh:iguana': 'iguana' });
+    ui.api.addMessages('en', {
+      'nh:jackal': 'jackal',
+      'nh:iguana': 'iguana',
+      'killer.starvation': 'starvation',
+    });
     ui.update(
       st({ dead: 'died', killer, endTurn: 77, endDepth: 3, endLevel: 2, turn: 77, dlvl: 3 }),
       [],

@@ -73,7 +73,7 @@ function nameQty(ctx: Ctx, e: Entity, quantity?: number): Msg {
  * "j - a food ration." ref: src/invent.c prinv()/xprname(). `count` is the number just added when
  * it is less than the stack's quantity ("(5 in total)"). `prefix` is a pickup encumbrance Msg.
  */
-function prinv(ctx: Ctx, e: Entity, count = 0, prefix: Msg | null = null): void {
+export function prinv(ctx: Ctx, e: Entity, count = 0, prefix: Msg | null = null): void {
   const it = e.c.item;
   if (!it) return;
   const totalOf = count > 0 && count < it.quantity;
