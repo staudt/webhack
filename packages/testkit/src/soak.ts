@@ -86,7 +86,7 @@ const isMod = (a: PlayerAction, id: string): boolean => a.type === 'mod' && a.ac
 
 /**
  * A seeded bot that plays like a player would, driven only by `actionsFor()` offers. Priority:
- * attack an adjacent hostile; eat when hungry; quaff when hurt; pick things up; occasionally wield,
+ * (while a multi-turn action is in progress: usually `continue`, sometimes cancel it) attack an adjacent hostile; eat when hungry; quaff when hurt; pick things up; occasionally wield,
  * wear, take off, read, throw daggers at monsters in line, drop; take stairs down; else a random
  * offer. Checks invariants as it goes.
  */
@@ -117,9 +117,13 @@ export function soak(mods: readonly Mod[], opts: SoakOptions): SoakResult {
     }
     return n;
   };
+  /** Whether the last step left a multi-turn action in progress, as the UI would see it. */
+  let continuing = false;
   const stepAndTrack = (a: PlayerAction): void => {
     const before = isMod(a, 'nh:pickup') ? carriedCount() : 0;
-    for (const e of engine.step(state, a).events) {
+    const r = engine.step(state, a);
+    continuing = r.continuing;
+    for (const e of r.events) {
       if (e.type === 'msg' && (e.key === 'combat.you_kill' || e.key === 'combat.you_destroy'))
         kills++;
     }
@@ -194,6 +198,15 @@ export function soak(mods: readonly Mod[], opts: SoakOptions): SoakResult {
         value: answer(pending.prompt),
       };
       aim = null;
+      log.push(act);
+      stepAndTrack(act);
+      if (log.length % every === 0) check(act);
+      continue;
+    }
+    if (continuing && rng.rn2(10) !== 0) {
+      // like the UI animating a travel, run or meal; one time in ten the bot cancels it by
+      // taking another action instead
+      const act: PlayerAction = { type: 'continue' };
       log.push(act);
       stepAndTrack(act);
       if (log.length % every === 0) check(act);

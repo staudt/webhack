@@ -182,6 +182,44 @@ describe('eating', () => {
     expect(heroHunger(s).nutrition).toBeGreaterThan(100 + 800 - 20);
   });
 
+  test('a meal runs one bite per step; another action cancels it like an interruption', () => {
+    const s = fresh();
+    heroHunger(s).nutrition = 100;
+    const r = ration(s);
+    const eatAction = { type: 'mod', action: 'nh:eat', args: { item: r.id } } as const;
+    const first = engine.step(s.state, eatAction);
+    expect(first.continuing).toBe(true);
+    expect(s.state.occupation?.action).toEqual(eatAction);
+    const second = engine.step(s.state, { type: 'continue' });
+    expect(second.continuing).toBe(true);
+    expect(heroHunger(s).nutrition).toBeGreaterThan(100);
+    expect(hungerData(s.ctx).victual?.usedtime).toBe(2);
+    // any other action: the meal stops ("You stop eating"), then the action is performed
+    const cancel = engine.step(s.state, { type: 'wait' });
+    expect(s.state.occupation).toBeNull();
+    expect(s.text(cancel)).toContain('You stop eating the food ration.');
+    expect(hungerData(s.ctx).victual?.eating).toBe(false);
+    expect(itemOf(s.state, r.id).eaten).toBeLessThan(800);
+    expect(invLine(s.state, s.state.entities[String(r.id)]!)).toMatch(/partly eaten/);
+    // continue now does nothing; eating again resumes the meal
+    engine.step(s.state, { type: 'continue' });
+    expect(hungerData(s.ctx).victual?.usedtime).toBe(2);
+    const rest = s.text(engine.stepAll(s.state, eatAction));
+    expect(rest).toContain('You resume your meal.');
+    expect(rest.join(' ')).toMatch(/You finish eating the food ration\./);
+  });
+
+  test('cancelling a meal with a fresh eat of the same item resumes rather than continues', () => {
+    const s = fresh();
+    heroHunger(s).nutrition = 100;
+    const r = ration(s);
+    const eatAction = { type: 'mod', action: 'nh:eat', args: { item: r.id } } as const;
+    engine.step(s.state, eatAction);
+    const again = s.text(engine.step(s.state, eatAction));
+    expect(again).toContain('You stop eating the food ration.');
+    expect(again).toContain('You resume your meal.');
+  });
+
   test('eating one ration of a stack leaves the rest', () => {
     const s = fresh();
     heroHunger(s).nutrition = 100;

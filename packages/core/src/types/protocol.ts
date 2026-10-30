@@ -16,7 +16,7 @@ export interface Replay {
 
 export interface SaveFile {
   format: 'nh-ts';
-  version: 3;
+  version: 4;
   mods: ModRef[];
   state: GameState;
   replay: Replay;
@@ -31,7 +31,14 @@ export type ToCore =
   | { t: 'hash' };
 
 export type FromCore =
-  | { t: 'view'; view: ViewUpdate; events: GameEvent[]; prompt: Prompt | null }
+  | {
+      t: 'view';
+      view: ViewUpdate;
+      events: GameEvent[];
+      prompt: Prompt | null;
+      /** A multi-turn action is in progress; the client sends `continue` (after a delay) or cancels. */
+      continuing: boolean;
+    }
   | { t: 'reply'; id: number; result: Json }
   | { t: 'saved'; save: string }
   | { t: 'hash'; hash: string }

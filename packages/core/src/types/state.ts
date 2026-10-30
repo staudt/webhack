@@ -3,6 +3,7 @@ import type { Entity } from './entity';
 import type { Level } from './level';
 import type { GameEvent } from './event';
 import type { Prompt } from './prompt';
+import type { PlayerAction } from './action';
 
 export interface Timer {
   at: number;
@@ -29,7 +30,7 @@ export interface PendingPrompt {
 
 /** The whole game. JSON-plain: no classes, Map, Set, functions or typed arrays. */
 export interface GameState {
-  version: 3;
+  version: 4;
   seed: number;
   turn: number;
   nextEntityId: number;
@@ -60,10 +61,23 @@ export interface GameState {
   /** Set when the game has ended; every further action is rejected. */
   gameOver: GameOver | null;
   pendingPrompt: PendingPrompt | null;
+  /**
+   * A multi-turn action in progress (travel, running, eating), advanced one move per
+   * `{ type: 'continue' }` step; any other action cancels it. `data` belongs to the action.
+   * ref: NetHack's occupation / multi.
+   */
+  occupation: Occupation | null;
+}
+
+export interface Occupation {
+  action: PlayerAction;
+  data: Json;
 }
 
 export interface StepResult {
   state: GameState;
   events: GameEvent[];
   prompt: Prompt | null;
+  /** True while `state.occupation` is set: send `{ type: 'continue' }` for the next move. */
+  continuing: boolean;
 }

@@ -8,7 +8,7 @@ import { nameItem } from './objnam';
 import { registerStats } from './stats';
 import { ITEM_ACTIONS } from './itemactions';
 import { registerNomul } from './nomul';
-import { EAT_ACTIONS } from './eat';
+import { EAT_ACTIONS, registerEat } from './eat';
 import { registerHunger } from './hunger';
 import { registerCorpses } from './corpses';
 import { registerHero } from './hero';
@@ -44,6 +44,7 @@ export const vanillaMod: Mod = {
     for (const a of EAT_ACTIONS) api.defineAction(a);
     registerCorpses(api);
     registerHunger(api);
+    registerEat(api);
     for (const b of BRAINS) api.defineBrain(b);
     for (const m of MONSTERS) api.defineMonster(m);
     for (const o of OBJECTS) {

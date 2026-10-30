@@ -106,8 +106,10 @@ export interface ActionDef {
   /** Handles the answer to a prompt this action raised with `ctx.ask`; returns the energy cost. */
   answer?(ctx: Ctx, value: Json, data: Json): number;
   /**
-   * Multi-turn actions (travel): after each performed step and the monsters' turns, the engine
-   * performs the action again while this returns true, nothing interrupted, and time passed.
+   * Multi-turn actions (travel, running, eating). After a move that took time and wasn't
+   * interrupted, returning true keeps `state.occupation` set, so the next
+   * `{ type: 'continue' }` performs the action again. Per-action progress belongs in
+   * `state.occupation.data` (null on the first move), never in module variables.
    */
   continues?(ctx: Ctx, action: PlayerAction): boolean;
 }

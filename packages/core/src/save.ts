@@ -4,7 +4,7 @@ import type { Replay, SaveFile } from './types/protocol';
 import type { GameState } from './types/state';
 
 export const SAVE_FORMAT = 'nh-ts';
-export const SAVE_VERSION = 3 as const;
+export const SAVE_VERSION = 4 as const;
 
 export function serializeSave(state: GameState, replay: Replay): string {
   const file: SaveFile = {
@@ -32,6 +32,12 @@ export function parseSave(text: string, registry: Registry): { state: GameState;
   }
   if (typeof file !== 'object' || file === null || file.format !== SAVE_FORMAT)
     throw new Error(`Not a ${SAVE_FORMAT} save file`);
+  // v3 -> v4 only added `occupation`, so v3 saves load with none in progress.
+  if ((file.version as number | undefined) === 3 && file.state) {
+    (file.state as { occupation?: unknown }).occupation ??= null;
+    (file.state as { version: number }).version = SAVE_VERSION;
+    file.version = SAVE_VERSION;
+  }
   if (file.version !== SAVE_VERSION)
     throw new Error(`Unsupported save version ${String(file.version)} (expected ${SAVE_VERSION})`);
   if (!file.state || !file.replay || !Array.isArray(file.mods))

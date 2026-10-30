@@ -23,6 +23,25 @@ describe('invariants', () => {
     expect(errs(fresh())).toEqual([]);
   });
 
+  test('occupation: valid, or null; never with a prompt or game over', () => {
+    const s = fresh();
+    s.occupation = {
+      action: { type: 'mod', action: 'nh:travel', args: { x: 1, y: 1 } },
+      data: null,
+    };
+    expect(errs(s)).toEqual([]);
+    s.occupation = { action: { type: 'mod', action: 'zz:nothing' }, data: null };
+    expect(errs(s).join('\n')).toMatch(/not registered/);
+    s.occupation = { action: { type: 'continue' }, data: null };
+    expect(errs(s).join('\n')).toMatch(/cannot continue/);
+    s.occupation = { action: { type: 'wait' }, data: null };
+    s.gameOver = { kind: 'died', killer: 'k', turn: 1, depth: 1, level: 1 };
+    expect(errs(s).join('\n')).toMatch(/occupation is set after game over/);
+    s.gameOver = null;
+    s.pendingPrompt = { prompt: { id: 'p', kind: 'yn', key: 'k' }, handler: 'nh:eat', data: null };
+    expect(errs(s).join('\n')).toMatch(/occupation is set while a prompt/);
+  });
+
   test('out of bounds entity', () => {
     const s = fresh();
     const p = getPlayer(s).c.pos!;

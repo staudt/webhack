@@ -38,7 +38,7 @@ interface ModRef {
 }
 
 interface GameState {
-  version: 3;
+  version: 4;
   seed: number;
   turn: number;
   nextEntityId: number;
@@ -58,6 +58,7 @@ interface GameState {
   modData: Record<string, Json>; // per-mod persistent data, keyed by mod id
   gameOver: { kind: 'died' | 'escaped'; killer: string; turn: number; depth: number; level: number } | null;
   pendingPrompt: { prompt: Prompt; handler: DefId; data: Json } | null; // next action must answer it
+  occupation: { action: PlayerAction; data: Json } | null; // multi-turn action in progress (travel, run, eating)
 }
 
 interface Entity {
@@ -127,13 +128,15 @@ type PlayerAction =
   | { type: 'move'; dir: Dir }
   | { type: 'wait' }
   | { type: 'search' }
-  | { type: 'answer'; promptId: string; value: Json } // prompt reply (types only in M1)
+  | { type: 'answer'; promptId: string; value: Json } // prompt reply
+  | { type: 'continue' } // performs the next move of state.occupation (no-op without one)
   | { type: 'mod'; action: DefId; args?: Json }; // mod-defined action
 
 interface StepResult {
   state: GameState;
   events: GameEvent[];
   prompt: Prompt | null;
+  continuing: boolean; // state.occupation is set: send { type: 'continue' } for the next move
 }
 
 type GameEvent =
@@ -161,7 +164,8 @@ interface Prompt {
 ```ts
 interface Engine {
   newGame(opts: { seed: number; width?: number; height?: number; role?: DefId }): StepResult; // events include 'welcome'
-  step(state: GameState, action: PlayerAction): StepResult; // mutates state in place
+  step(state: GameState, action: PlayerAction): StepResult; // mutates state in place; ONE move of a multi-turn action
+  stepAll(state: GameState, action: PlayerAction): StepResult; // step, then `continue` until done (up to MAX_REPEAT); for tests and tools
   query(state: GameState): CoreQuery;
   save(state: GameState, replay: Replay): string;
   load(text: string): { state: GameState; replay: Replay };
@@ -171,7 +175,8 @@ interface Engine {
 Each step does the following (ref: src/allmain.c moveloop_core):
 
 1. If the game is over, the step throws. If a prompt is pending, the action must be its `answer`, which goes to the handler's `answer()`.
-2. `beforeAction` hooks run, and any of them may cancel the action.
+   Any action other than `continue` first clears `state.occupation` (this is how input cancels a multi-turn action). `continue` takes the action to perform from `state.occupation.action` instead (and does nothing without one). If the action's def has `continues`, the engine sets `state.occupation = { action: <clone>, data: null }` before performing a fresh action.
+2. `beforeAction` hooks run, and any of them may cancel the action (which also clears the occupation).
 3. The action's `perform` runs and returns its energy cost. The default cost is 12, and a cost of 0 means no time passes (for example, bumping a wall). Vision is refreshed.
 4. `afterAction` hooks run.
 5. Until the hero has 12 energy again (ref: src/mon.c movemon):
@@ -179,7 +184,9 @@ Each step does the following (ref: src/allmain.c moveloop_core):
    - this repeats while any monster can still act;
    - otherwise the turn ends: monsters gain `brain.movement()` (or their speed), the hero gains speed, `turn++`, due timers fire, and the `endOfTurn` hooks run.
 6. Vision is recomputed and memory updated.
-7. If the action has `continues()` and it returns true, steps 2–6 repeat inside the same `step()` call. This stops on cost 0, `ctx.interrupt()`, game over, a prompt, or after `MAX_REPEAT` repeats.
+7. The occupation is kept only if the move took time (cost > 0), nothing called `ctx.interrupt()`, there is no game over or prompt, and the def's `continues(ctx, action)` returned true. Otherwise it is cleared. `StepResult.continuing` says whether it is still set. The step ends here: one move per `step()`.
+
+A multi-turn action (travel, running, eating) is therefore a series of steps. The UI sends `{ type: 'continue' }` after a short delay while `continuing` is true, which animates the move and lets any other input cancel it by sending (or just swallowing and not sending) a different action. Per-move progress belongs in `state.occupation.data` (JSON; `null` on the first move), never in module variables, so the state can be saved, loaded and replayed in the middle of a travel. `engine.stepAll` loops `continue` until the occupation ends or `MAX_REPEAT` continues were made.
 
 The game stops at once (mid-turn, too) when `ctx.endGame` is called or a prompt is raised.
 
@@ -221,7 +228,7 @@ interface ActionDef {
   perform(ctx: Ctx, action: PlayerAction): number; // energy cost
   handles: PlayerAction['type']; // at most one handler per built-in type; mod actions use 'mod'
   answer?(ctx: Ctx, value: Json, data: Json): number; // answers a prompt this action raised
-  continues?(ctx: Ctx, action: PlayerAction): boolean; // multi-turn actions (travel)
+  continues?(ctx: Ctx, action: PlayerAction): boolean; // multi-turn actions: true keeps state.occupation set (see step 7)
 }
 interface MonsterDef {
   // ref: include/permonst.h struct permonst
@@ -431,7 +438,7 @@ type ToCore =
   | { t: 'save' }
   | { t: 'hash' };
 type FromCore =
-  | { t: 'view'; view: ViewSnapshot | ViewDelta; events: GameEvent[]; prompt: Prompt | null }
+  | { t: 'view'; view: ViewSnapshot | ViewDelta; events: GameEvent[]; prompt: Prompt | null; continuing: boolean }
   | { t: 'reply'; id: number; result: Json }
   | { t: 'saved'; save: string }
   | { t: 'hash'; hash: string }
@@ -444,10 +451,10 @@ interface Replay {
   mods: ModRef[];
   actions: PlayerAction[];
 }
-// Save text = JSON.stringify({ format: 'nh-ts', version: 1, mods, state, replay })
+// Save text = JSON.stringify({ format: 'nh-ts', version: 4, mods, state, replay }) // v3 saves migrate by adding occupation: null
 ```
 
-After `new` or `load`, the host sends a full snapshot. After each `act`, it sends a delta. Every action is appended to the replay, and replaying `{ seed, width, height, mods, actions }` must reproduce `stateHash`.
+After `new` or `load`, the host sends a full snapshot. After each `act`, it sends a delta. Every action, including each `continue`, is appended to the replay, and replaying `{ seed, width, height, mods, actions }` must reproduce `stateHash`.
 
 ## Package boundaries
 

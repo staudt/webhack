@@ -11,6 +11,9 @@ import {
 import { describe, expect, test } from 'vitest';
 import { T, messagesEn, vanillaMod } from '../src/index';
 import { heroAt, mapSetup, newtAt, travelTo } from './maps';
+import { engine as sharedEngine } from './itemHelpers';
+
+const engine2 = () => sharedEngine;
 
 const CHARS: Record<string, DefId> = {
   ' ': T.stone,
@@ -65,7 +68,8 @@ function setup(rows: string[], opts: { forget?: Pos[] } = {}) {
   if (!pos) throw new Error('no pos');
   pos.x = start.x;
   pos.y = start.y;
-  const step = (a: Parameters<typeof engine.step>[1]): GameEvent[] => engine.step(state, a).events;
+  const step = (a: Parameters<typeof engine.step>[1]): GameEvent[] =>
+    engine.stepAll(state, a).events;
   return { engine, state, step };
 }
 
@@ -182,10 +186,11 @@ describe('nh:travel guess (findtravelpath TRAVP_GUESS)', () => {
     expect(heroAt(m.state)).toEqual({ x: 3, y: 0 });
   });
 
-  test('an unexplored target straight ahead in a dark corridor: walks right up to it', () => {
+  test('an unexplored target straight ahead in a dark corridor: goes to the end of what is seen', () => {
     const m = mapSetup(['@#####'], { memory: 'none' });
     m.step(travelTo(5, 0));
-    expect(heroAt(m.state)).toEqual({ x: 5, y: 0 });
+    // the goal was fixed on the tap (the cell next to the unseen target) and travel stops there
+    expect(heroAt(m.state)).toEqual({ x: 4, y: 0 });
   });
 
   test('nothing explored in that direction: one step', () => {
@@ -228,5 +233,69 @@ describe('nh:travel guess (findtravelpath TRAVP_GUESS)', () => {
       return JSON.stringify(m.state);
     };
     expect(run()).toBe(run());
+  });
+});
+
+describe('nh:travel one move per step, fixed destination', () => {
+  test('step() performs one move; continue performs the next until arrival', () => {
+    const { engine, state } = setup(['@.........']);
+    const r1 = engine.step(state, go(9, 0));
+    expect(posOf(state)).toEqual({ x: 1, y: 0 });
+    expect(r1.continuing).toBe(true);
+    const r2 = engine.step(state, { type: 'continue' });
+    expect(posOf(state)).toEqual({ x: 2, y: 0 });
+    expect(r2.continuing).toBe(true);
+    // progress is JSON in the occupation
+    expect(state.occupation?.data).toMatchObject({ goal: { x: 9, y: 0 } });
+    let last = r2;
+    for (let i = 0; i < 20 && last.continuing; i++) last = engine.step(state, { type: 'continue' });
+    expect(posOf(state)).toEqual({ x: 9, y: 0 });
+    expect(last.continuing).toBe(false);
+    expect(state.occupation).toBeNull();
+  });
+
+  test('another action cancels the travel and is performed', () => {
+    const { engine, state } = setup(['@.........']);
+    engine.step(state, go(9, 0));
+    const r = engine.step(state, { type: 'move', dir: 'w' });
+    expect(r.continuing).toBe(false);
+    expect(state.occupation).toBeNull();
+    expect(posOf(state)).toEqual({ x: 0, y: 0 });
+    engine.step(state, { type: 'continue' });
+    expect(posOf(state)).toEqual({ x: 0, y: 0 });
+  });
+
+  test('a tap into the unknown fixes the destination: it does not keep pushing into the dark', () => {
+    // The corridor beyond x=3 is only discovered as the hero walks (vision reveals it), but the
+    // goal was fixed at the first move.
+    const m = mapSetup(['@###     ', '   #     ', '   #     ', '   #     '], { memory: 'none' });
+    m.step(travelTo(8, 0));
+    expect(heroAt(m.state)).toEqual({ x: 3, y: 0 });
+    expect(m.state.occupation).toBeNull();
+  });
+
+  test('the goal is stored on the first move and never re-guessed', () => {
+    const m = mapSetup(['@###     ', '   #     ', '   #     ', '   #     '], { memory: 'none' });
+    const first = engine2().step(m.state, travelTo(8, 0));
+    expect(first.continuing).toBe(true);
+    const goal = (m.state.occupation?.data as unknown as { goal: Pos }).goal;
+    expect(goal).toEqual({ x: 3, y: 0 });
+    for (let i = 0; i < 5; i++) engine2().step(m.state, { type: 'continue' });
+    expect(heroAt(m.state)).toEqual({ x: 3, y: 0 });
+    expect(m.state.occupation).toBeNull();
+  });
+
+  test('the hero already being the closest point: exactly one step toward the tap', () => {
+    const m = mapSetup(['@#    '], { memory: 'none' });
+    const r = engine2().step(m.state, travelTo(5, 0));
+    expect(heroAt(m.state)).toEqual({ x: 1, y: 0 });
+    expect(r.continuing).toBe(false);
+    expect(m.state.occupation).toBeNull();
+  });
+
+  test('a known reachable target is travelled to as before', () => {
+    const m = mapSetup(['@........']);
+    engine2().stepAll(m.state, travelTo(8, 0));
+    expect(heroAt(m.state)).toEqual({ x: 8, y: 0 });
   });
 });

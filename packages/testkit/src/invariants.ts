@@ -137,6 +137,20 @@ export function checkInvariants(state: GameState, registry: Registry): string[] 
   }
 
   if (state.pendingPrompt && state.gameOver) errs.push('pendingPrompt and gameOver are both set');
+  if (state.occupation !== null) {
+    const occ = state.occupation;
+    if (!occ || typeof occ !== 'object' || typeof occ.action?.type !== 'string')
+      errs.push('occupation has no valid action');
+    else if (occ.action.type === 'continue' || occ.action.type === 'answer')
+      errs.push(`occupation action '${occ.action.type}' cannot continue`);
+    else if (occ.action.type === 'mod') {
+      const id = occ.action.action;
+      if (!registry.actions.some((a) => a.id === id))
+        errs.push(`occupation action '${id}' is not registered`);
+    }
+    if (state.pendingPrompt) errs.push('occupation is set while a prompt is pending');
+    if (state.gameOver) errs.push('occupation is set after game over');
+  }
   const heroPos = player?.c.pos;
   if (heroPos && state.levels[state.currentLevel] && heroPos.level !== state.currentLevel) {
     errs.push(`hero level '${heroPos.level}' != currentLevel '${state.currentLevel}'`);

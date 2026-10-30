@@ -19,6 +19,8 @@ export interface ViewMessage {
   view: ViewUpdate;
   events: GameEvent[];
   prompt: Prompt | null;
+  /** A multi-turn action is in progress: the UI sends `continue` or cancels. */
+  continuing: boolean;
 }
 
 export interface Remote extends GameClient {
@@ -48,7 +50,8 @@ export function createRemote(worker: WorkerLike): Remote {
     const m = e.data;
     switch (m.t) {
       case 'view':
-        for (const fn of viewFns) fn({ view: m.view, events: m.events, prompt: m.prompt });
+        for (const fn of viewFns)
+          fn({ view: m.view, events: m.events, prompt: m.prompt, continuing: m.continuing });
         return;
       case 'reply': {
         const p = pending.get(m.id);

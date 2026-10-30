@@ -18,7 +18,7 @@ import type {
   ViewItem,
   ViewUpdate,
 } from '@nh/core';
-import { ARROW_CODES, DEFAULT_CHORD_MS, createChord } from './chord';
+import { ARROW_CODES, DEFAULT_CHORD_MS, createChord, dirOf } from './chord';
 import { attachKeyUp, attachKeys, attachTap } from './input';
 import { DEFAULT_LOCALE, mergeMessages, translate, uiMessagesEn, type Catalogs } from './i18n';
 import { buildLayout } from './layout';
@@ -31,6 +31,12 @@ import { an, ripArt, statusLines } from './status';
 
 /** Window for a double tap on the map, in ms. */
 export const DEFAULT_DOUBLE_TAP_MS = 350;
+
+/**
+ * Delay before the UI sends `continue` for the next move of a travel, run or meal, so the hero is
+ * seen walking. A little faster than NetHack's runmode "walk" delay.
+ */
+export const DEFAULT_STEP_DELAY_MS = 60;
 
 export interface GameClient {
   act(action: PlayerAction): void;
@@ -45,6 +51,8 @@ export interface UiOptions {
   locale?: string;
   /** Window for chording two arrow keys into a diagonal; 0 disables. Default 100. */
   chordWindowMs?: number;
+  /** Delay between the moves of a multi-turn action. Default {@link DEFAULT_STEP_DELAY_MS}. */
+  stepDelayMs?: number;
   /** Called by the tombstone's New game button; falls back to the menu item with id 'new'. */
   onNewGame?: () => void;
   /**
@@ -62,7 +70,11 @@ export interface UiOptions {
 }
 
 export interface Ui {
-  update(view: ViewUpdate, events: GameEvent[], prompt: Prompt | null): void;
+  /**
+   * `continuing`: a multi-turn action is in progress. The UI sends `continue` after the step
+   * delay until it ends; any input meanwhile cancels it and is swallowed.
+   */
+  update(view: ViewUpdate, events: GameEvent[], prompt: Prompt | null, continuing?: boolean): void;
   notify(key: string, params?: Params): void;
   readonly api: ClientApi;
   destroy(): void;
@@ -122,6 +134,32 @@ export function createUi(opts: UiOptions): Ui {
   let lookMode = false;
   let modal: OpenMenu | null = null;
   let promptId: string | null = null;
+
+  // Multi-turn actions (travel, run, meals) advance by `continue` messages, one per step delay.
+  const stepDelayMs = opts.stepDelayMs ?? DEFAULT_STEP_DELAY_MS;
+  let stepTimer: ReturnType<typeof setTimeout> | null = null;
+  /** A `continue` was sent and its view has not arrived yet. */
+  let continueInFlight = false;
+  /** The next view's `continuing` is ignored (the player cancelled while a continue was in flight). */
+  let skipNextContinuing = false;
+  const clearStepTimer = (): void => {
+    if (stepTimer !== null) clearTimeout(stepTimer);
+    stepTimer = null;
+  };
+  const isContinuing = (): boolean => stepTimer !== null || continueInFlight;
+  /**
+   * Input while a multi-turn action animates only cancels it: stops sending `continue` (the
+   * engine drops the occupation with the next real action) and the input itself is swallowed.
+   */
+  const cancelContinuing = (): boolean => {
+    if (!isContinuing()) return false;
+    clearStepTimer();
+    if (continueInFlight) skipNextContinuing = true;
+    continueInFlight = false;
+    chordReset();
+    prefix = null;
+    return true;
+  };
 
   // Assigned once runCommand exists; showModal only runs after that.
   let chordReset = (): void => {};
@@ -355,9 +393,6 @@ export function createUi(opts: UiOptions): Ui {
     const pos = renderer.cellAt(x, y);
     if (!pos) return;
     const wasLook = lookMode;
-    if (wasLook) setLook(false);
-    const p = playerPos;
-    const dist = p ? Math.max(Math.abs(pos.x - p.x), Math.abs(pos.y - p.y)) : Infinity;
     // A second tap soon after the first, on the same cell: the first already acted.
     const at = Date.now();
     const prev = lastTap;
@@ -367,6 +402,13 @@ export function createUi(opts: UiOptions): Ui {
       prev !== null &&
       at - prev.at <= doubleTapMs &&
       Math.max(Math.abs(pos.x - prev.pos.x), Math.abs(pos.y - prev.pos.y)) <= 1;
+    // Any other tap while a travel or run animates just cancels it. A double tap's second tap
+    // starts the run: the engine drops the first tap's travel when the run action arrives.
+    if (double) cancelContinuing();
+    else if (cancelContinuing()) return;
+    if (wasLook) setLook(false);
+    const p = playerPos;
+    const dist = p ? Math.max(Math.abs(pos.x - p.x), Math.abs(pos.y - p.y)) : Infinity;
     lastTap = wasLook || double ? null : { at, pos };
     if (!wasLook && dist === 0) {
       // Not a menu after a double tap that has already brought the hero to this cell.
@@ -417,26 +459,49 @@ export function createUi(opts: UiOptions): Ui {
     }
   };
 
+  /** Completes an armed prefix with a direction command, or runs the command. */
+  const dispatchDirection = (cmd: UiCommand): void => {
+    if (prefix === null) {
+      runCommand(cmd);
+      return;
+    }
+    const make = opts.prefixes?.[prefix];
+    prefix = null;
+    const dir = dirOf(cmd);
+    if (make && dir !== null) game.act(make(dir as Dir));
+  };
   const chord = createChord({
     windowMs: opts.chordWindowMs ?? DEFAULT_CHORD_MS,
-    dispatch: runCommand,
+    dispatch: dispatchDirection,
   });
   chordReset = chord.reset;
   const win = doc.defaultView;
   win?.addEventListener('blur', chord.reset);
   const detachKeyUp = attachKeyUp(doc, (e) => chord.up(e.code));
+  let swallowUntil = -Infinity;
   const detachKeys = attachKeys(doc, (e) => {
     if (modal) return modal.onKey(e);
+    // A cancel swallows its key, and any key pressed with it (the second arrow of a diagonal).
+    const now = e.timeStamp;
+    if (now < swallowUntil && e.key !== 'Shift') return true;
+    if (e.key !== 'Shift' && cancelContinuing()) {
+      swallowUntil = now + (opts.chordWindowMs ?? DEFAULT_CHORD_MS);
+      return true;
+    }
     const cmd = keymap.resolve(e);
     if (prefix !== null) {
       // The key after a prefix: a direction completes it; anything else cancels it.
-      const make = opts.prefixes?.[prefix];
       if (!cmd && e.key !== 'Escape') return false; // Shift alone, etc.
+      if (cmd && ARROW_CODES.has(e.code) && dirOf(cmd) !== null) {
+        // Arrows wait for the chord window, so Up+Left give one diagonal run.
+        chord.down(e.code, e.repeat, cmd);
+        return true;
+      }
+      const make = opts.prefixes?.[prefix];
       prefix = null;
       chord.reset();
-      if (make && cmd?.type === 'action' && cmd.action.type === 'move') {
-        game.act(make(cmd.action.dir));
-      }
+      const dir = cmd ? dirOf(cmd) : null;
+      if (make && cmd?.type === 'action' && dir !== null) game.act(make(dir as Dir));
       return true;
     }
     if (!cmd) return false;
@@ -453,15 +518,19 @@ export function createUi(opts: UiOptions): Ui {
   });
   const detachTap = attachTap(layout.map, onTap);
   const onMenuBtn = (): void => {
+    if (cancelContinuing()) return;
     if (!modal) openMainMenu();
   };
   const onActionsBtn = (): void => {
+    if (cancelContinuing()) return;
     if (!modal) openActions({ kind: 'self' });
   };
   const onLookBtn = (): void => {
+    if (cancelContinuing()) return;
     if (!modal) setLook(!lookMode);
   };
   const onInventoryBtn = (): void => {
+    if (cancelContinuing()) return;
     if (!modal) openInventory();
   };
   layout.inventoryBtn.addEventListener('click', onInventoryBtn);
@@ -509,8 +578,12 @@ export function createUi(opts: UiOptions): Ui {
 
   return {
     api,
-    update(view, events, prompt) {
+    update(view, events, prompt, continuing = false) {
       if (destroyed) return;
+      clearStepTimer();
+      continueInFlight = false;
+      const keepGoing = continuing && !skipNextContinuing;
+      skipNextContinuing = false;
       renderer.apply(view);
       if (view.kind === 'full') legend = view.legend;
       inventory = view.inventory;
@@ -525,6 +598,13 @@ export function createUi(opts: UiOptions): Ui {
       if (view.status['dead'] !== undefined) {
         if (!tombstone) showTombstone(view.status);
         return;
+      }
+      if (keepGoing && !prompt && !listEv) {
+        stepTimer = setTimeout(() => {
+          stepTimer = null;
+          continueInFlight = true;
+          game.act({ type: 'continue' });
+        }, stepDelayMs);
       }
       if (tombstone) {
         tombstone = false;
@@ -558,6 +638,7 @@ export function createUi(opts: UiOptions): Ui {
     destroy() {
       if (destroyed) return;
       destroyed = true;
+      clearStepTimer();
       closeModal();
       detachKeys();
       detachKeyUp();

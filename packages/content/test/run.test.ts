@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'vitest';
+import { isJsonPlain } from '@nh/core';
 import { messagesEn } from '../src/index';
 import { dropAt, heroAt, mapSetup, newtAt, runDir } from './maps';
 
@@ -216,5 +217,34 @@ describe('nh:run', () => {
       return JSON.stringify(m.state);
     };
     expect(run()).toBe(run());
+  });
+});
+
+describe('nh:run one move per step', () => {
+  test('step() moves once; continue runs on, with progress in occupation.data', () => {
+    const m = mapSetup(['|.......|', '|.@.....|', '|.......|']);
+    const r1 = engine.step(m.state, runDir('e', 'rush'));
+    expect(heroAt(m.state)).toEqual({ x: 3, y: 1 });
+    expect(r1.continuing).toBe(true);
+    expect(m.state.occupation?.data).toMatchObject({ dx: 1, dy: 0, moved: true });
+    const r2 = engine.step(m.state, { type: 'continue' });
+    expect(heroAt(m.state)).toEqual({ x: 4, y: 1 });
+    expect(r2.continuing).toBe(true);
+    expect(isJsonPlain(m.state.occupation)).toBe(true);
+    let last = r2;
+    for (let i = 0; i < 10 && last.continuing; i++)
+      last = engine.step(m.state, { type: 'continue' });
+    expect(heroAt(m.state)).toEqual({ x: 7, y: 1 });
+    expect(m.state.occupation).toBeNull();
+  });
+
+  test('another action cancels the run and is performed', () => {
+    const m = mapSetup(['|.......|', '|.@.....|', '|.......|']);
+    engine.step(m.state, runDir('e', 'rush'));
+    engine.step(m.state, { type: 'move', dir: 'n' });
+    expect(m.state.occupation).toBeNull();
+    expect(heroAt(m.state)).toEqual({ x: 3, y: 0 });
+    engine.step(m.state, { type: 'continue' });
+    expect(heroAt(m.state)).toEqual({ x: 3, y: 0 });
   });
 });

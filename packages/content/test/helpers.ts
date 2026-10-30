@@ -60,7 +60,7 @@ export function setup(rows: string[], seed = 1) {
   const hero = getPlayer(state);
   if (hero.c.pos) Object.assign(hero.c.pos, { level: 'dlvl1', x: start.x, y: start.y });
   if (hero.c.hp) hero.c.hp = { cur: 500, max: 500 };
-  const wait = () => engine.step(state, { type: 'wait' });
+  const wait = () => engine.stepAll(state, { type: 'wait' });
   wait();
   return { engine, state, level, wait };
 }

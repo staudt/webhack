@@ -1,6 +1,6 @@
 import { vanillaMod } from '@nh/content';
 import { describe, expect, test } from 'vitest';
-import { soak } from '../src/index';
+import { recordGame, runReplay, soak } from '../src/index';
 
 describe('soak', () => {
   for (const seed of [1, 2, 3, 4, 5]) {
@@ -37,4 +37,21 @@ describe('soak', () => {
     expect(a.finalHash).toBe(b.finalHash);
     expect(a.log).toEqual(b.log);
   });
+});
+
+describe('soak with multi-turn actions', () => {
+  test(
+    'the bot sends continue while continuing, and the log replays to the same hash',
+    {
+      timeout: 30000,
+    },
+    () => {
+      const r = soak([vanillaMod], { seed: 7, turns: 800, checkEvery: 5 });
+      expect(r.violations).toBeNull();
+      expect(r.log.some((a) => a.type === 'continue')).toBe(true);
+      const rec = recordGame([vanillaMod], { seed: 7, width: 80, height: 21 }, r.log);
+      expect(rec.hash).toBe(r.finalHash);
+      expect(runReplay([vanillaMod], rec).hash).toBe(r.finalHash);
+    },
+  );
 });

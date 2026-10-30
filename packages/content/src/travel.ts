@@ -12,6 +12,7 @@ import {
   type ActionDef,
   type Ctx,
   type Dir,
+  type Json,
   type Level,
   type PlayerAction,
   type Pos,
@@ -61,49 +62,50 @@ export interface Watch {
 }
 
 /**
- * Per-command state (NetHack's u.dx/u.dy, last_str_turn, gt.travelmap, multi). It is not part of
- * GameState: it lives only while the engine repeats one action object inside a single step() call.
+ * Per-command state (NetHack's u.dx/u.dy, last_str_turn, gt.travelmap, multi). It lives in
+ * `state.occupation.data`, so it is JSON-plain and survives from one `continue` step to the next.
  */
 export interface Session {
-  /** Set by continues(); a perform() that finds it false starts a fresh session. */
-  live: boolean;
   watch: Watch;
   /** Travel: cell indices the hero has left during this travel (ref: gt.travelmap). */
-  visited: Set<number>;
+  visited: number[];
   /** Run: current direction (u.dx, u.dy), turn tally (u.last_str_turn) and whether it has moved. */
   dx: number;
   dy: number;
   lastTurn: number;
   moved: boolean;
+  /** Travel: the destination, fixed on the first move (see DEVIATIONS.md). */
+  goal?: Pos;
+  /** Travel: the first move was the single step toward a tap that had no closer reachable point. */
+  single?: boolean;
 }
 
-const sessions = new WeakMap<object, Session>();
-
+/**
+ * The session of the occupation in progress, started on the first move (when `data` is null).
+ * The returned object is the occupation's data itself: mutate it in place.
+ */
 export function beginSession(
   ctx: Ctx,
-  action: PlayerAction,
   init: Pick<Session, 'dx' | 'dy'> = { dx: 0, dy: 0 },
 ): Session {
-  const prev = sessions.get(action);
-  if (prev?.live) {
-    prev.live = false;
-    return prev;
-  }
+  const occ = ctx.state.occupation;
+  if (occ && occ.data !== null && typeof occ.data === 'object')
+    return occ.data as unknown as Session;
   const s: Session = {
-    live: false,
     watch: watchOf(ctx),
-    visited: new Set(),
+    visited: [],
     dx: init.dx,
     dy: init.dy,
     lastTurn: 0,
     moved: false,
   };
-  sessions.set(action, s);
+  if (occ) occ.data = s as unknown as Json;
   return s;
 }
 
-export function sessionOf(action: PlayerAction): Session | undefined {
-  return sessions.get(action);
+export function sessionOf(ctx: Ctx): Session | undefined {
+  const data = ctx.state.occupation?.data;
+  return data !== null && typeof data === 'object' ? (data as unknown as Session) : undefined;
 }
 
 /** ref: src/monmove.c dochugw(): BOLT_LIM + 1 */
@@ -301,6 +303,14 @@ function nextTravelCell(ctx: Ctx, here: Pos, target: Pos): { cell: Pos; revisit:
   return cell ? { cell, revisit: true } : null;
 }
 
+/** The next cell toward a destination fixed earlier: no re-guessing, null when it is unreachable. */
+function nextFixedCell(ctx: Ctx, here: Pos, goal: Pos): { cell: Pos; revisit: boolean } | null {
+  const first = ctx.query.pathTo(goal)?.[0];
+  if (first) return { cell: first, revisit: true };
+  const cell = stepToward(ctx, here, goal);
+  return cell ? { cell, revisit: true } : null;
+}
+
 // ref: src/cmd.c dotravel(), src/hack.c findtravelpath()
 const travel: ActionDef = {
   id: 'nh:travel',
@@ -321,9 +331,24 @@ const travel: ActionDef = {
   perform(ctx, action) {
     const target = targetOf(action);
     if (!target) return 0;
-    const session = beginSession(ctx, action);
+    const session = beginSession(ctx);
     const here = heroPos(ctx);
-    const found = nextTravelCell(ctx, here, target);
+    let found: { cell: Pos; revisit: boolean } | null;
+    if (!session.goal && !session.single) {
+      // The first move fixes the destination (see DEVIATIONS.md): the tapped cell if the way is
+      // known, else the nearest reachable point; if the hero already is that point, one step
+      // toward the tap and no more.
+      if (here.x === target.x && here.y === target.y) return 0;
+      if (ctx.query.pathTo(target)?.[0]) {
+        session.goal = target;
+      } else {
+        const guess = guessPoint(ctx, here, target);
+        if (guess.x === here.x && guess.y === here.y) session.single = true;
+        else session.goal = guess;
+      }
+    }
+    if (session.goal) found = nextFixedCell(ctx, here, session.goal);
+    else found = nextTravelCell(ctx, here, target);
     if (!found) return 0;
     const next = found.cell;
     const dir: Dir | undefined = DIR_LIST.find(
@@ -338,24 +363,21 @@ const travel: ActionDef = {
     // ref: src/hack.c findtravelpath(): stepping onto a cell already left during this travel
     // means going in circles: take this step and stop.
     const width = getLevel(ctx.state).width;
-    if (found.revisit && session.visited.has(next.y * width + next.x)) {
+    if (found.revisit && session.visited.includes(next.y * width + next.x)) {
       ctx.emit({ type: 'msg', key: 'travel.unsure' });
       ctx.interrupt();
     }
-    session.visited.add(here.y * width + here.x);
+    session.visited.push(here.y * width + here.x);
     // Delegating keeps door auto-open, diagonal rules etc. identical to walking.
     return move.perform(ctx, { type: 'move', dir });
   },
-  continues(ctx, action) {
-    const target = targetOf(action);
-    if (!target) return false;
+  continues(ctx) {
+    const s = sessionOf(ctx);
+    if (!s?.goal || s.single) return false;
     const here = heroPos(ctx);
-    if (here.x === target.x && here.y === target.y) return false;
+    if (here.x === s.goal.x && here.y === s.goal.y) return false;
     // ref: src/hack.c lookaround(): travel does not stop at doors or stairs, only for monsters.
     if (hostileAdjacent(ctx)) return false;
-    const s = sessionOf(action);
-    if (!s) return false;
-    s.live = true;
     return !disturbed(ctx, s);
   },
 };

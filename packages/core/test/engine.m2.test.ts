@@ -22,6 +22,8 @@ const ctl = {
   walkCost: 12,
   walkEndAt: 0,
   interruptAt: 0,
+  cancelWalk: false,
+  askAt: 0,
   offer: null as null | ((ctx: Ctx) => void),
   answered: [] as { value: Json; data: Json }[],
   newGame: [] as { hero: EntityId; hadPos: boolean; levels: number }[],
@@ -38,6 +40,8 @@ beforeEach(() => {
   ctl.walkCost = 12;
   ctl.walkEndAt = 0;
   ctl.interruptAt = 0;
+  ctl.cancelWalk = false;
+  ctl.askAt = 0;
   ctl.offer = null;
   ctl.answered = [];
   ctl.newGame = [];
@@ -94,6 +98,9 @@ const mmMod: Mod = {
       });
     });
     api.on('newLevel', (_ctx, level) => void ctl.newLevels.push(level.id));
+    api.on('beforeAction', (_ctx, a) =>
+      ctl.cancelWalk && a.type === 'mod' && a.action === 'fk:walk' ? 'cancel' : 'continue',
+    );
     api.on('afterAction', (ctx, a) => {
       if (a.type === 'mod' && a.action === 'fk:walk' && ctl.walks === ctl.interruptAt)
         ctx.interrupt();
@@ -110,9 +117,11 @@ const fkExtra = (api: Parameters<Mod['register']>[0]): void => {
     perform(ctx) {
       ctl.walks++;
       if (ctl.walks === ctl.walkEndAt) ctx.endGame(over('walked'));
+      if (ctl.walks === ctl.askAt) ctx.ask({ id: 'p1', kind: 'yn', key: 'q.yn' }, 'fk:walk', null);
       return ctl.walkCost;
     },
     continues: () => ctl.walks < ctl.walkMax,
+    answer: () => 12,
   });
   api.defineAction({
     id: 'fk:goto',
@@ -489,47 +498,164 @@ describe('prompts', () => {
 });
 
 describe('multi-turn actions', () => {
-  test('repeats within one step, monsters act between repeats', () => {
+  const CONT: PlayerAction = { type: 'continue' };
+
+  test('a step performs one move and keeps the occupation', () => {
+    const s = fresh();
+    const r = engine.step(s, mod('fk:walk'));
+    expect(ctl.walks).toBe(1);
+    expect(r.continuing).toBe(true);
+    expect(s.occupation).toEqual({ action: mod('fk:walk'), data: null });
+  });
+
+  test('continue performs the next move, with the monsters acting in between', () => {
     const s = fresh();
     addMon(s, 'mm:mon', { energy: 12 });
     const t0 = s.turn;
     engine.step(s, mod('fk:walk'));
+    for (let i = 0; i < 4; i++) {
+      expect(s.occupation).not.toBeNull();
+      engine.step(s, CONT);
+    }
     expect(ctl.walks).toBe(5);
     expect(s.turn).toBe(t0 + 5);
-    expect(ctl.calls).toHaveLength(5);
     expect(ctl.calls.map((c) => c.turn)).toEqual([t0, t0 + 1, t0 + 2, t0 + 3, t0 + 4]);
+    expect(s.occupation).toBeNull(); // the fifth move was the last
   });
 
-  test('stops when continues returns false', () => {
-    ctl.walkMax = 3;
-    engine.step(fresh(), mod('fk:walk'));
-    expect(ctl.walks).toBe(3);
+  test('the occupation is a clone of the action', () => {
+    const s = fresh();
+    const a = mod('fk:walk', { n: 1 });
+    engine.step(s, a);
+    expect(s.occupation?.action).toEqual(a);
+    expect(s.occupation?.action).not.toBe(a);
   });
 
-  test('stops on ctx.interrupt() from an afterAction hook', () => {
-    ctl.interruptAt = 2;
-    engine.step(fresh(), mod('fk:walk'));
-    expect(ctl.walks).toBe(2);
-  });
-
-  test('stops when cost is 0', () => {
-    ctl.walkCost = 0;
-    engine.step(fresh(), mod('fk:walk'));
+  test('another action cancels the occupation and is performed', () => {
+    const s = fresh();
+    engine.step(s, mod('fk:walk'));
+    const t = s.turn;
+    const r = engine.step(s, WAIT);
+    expect(s.occupation).toBeNull();
+    expect(r.continuing).toBe(false);
+    expect(ctl.walks).toBe(1);
+    expect(s.turn).toBe(t + 1);
+    engine.step(s, CONT);
     expect(ctl.walks).toBe(1);
   });
 
-  test('stops at MAX_REPEAT', () => {
-    ctl.walkMax = Infinity;
-    engine.step(fresh(), mod('fk:walk'));
-    expect(ctl.walks).toBe(MAX_REPEAT);
+  test('a different multi-turn action replaces the occupation', () => {
+    const s = fresh();
+    engine.step(s, mod('fk:walk', { a: 1 }));
+    engine.step(s, mod('fk:walk', { a: 2 }));
+    expect(s.occupation?.action).toEqual(mod('fk:walk', { a: 2 }));
+    expect(ctl.walks).toBe(2);
   });
 
-  test('stops on game over', () => {
-    ctl.walkEndAt = 3;
+  test('continue without an occupation is a no-op', () => {
+    const s = fresh();
+    const t = s.turn;
+    const r = engine.step(s, CONT);
+    expect(r.events).toEqual([]);
+    expect(r.continuing).toBe(false);
+    expect(s.turn).toBe(t);
+    expect(ctl.walks).toBe(0);
+  });
+
+  test('the occupation ends when continues returns false', () => {
+    ctl.walkMax = 3;
     const s = fresh();
     engine.step(s, mod('fk:walk'));
+    engine.step(s, CONT);
+    expect(s.occupation).not.toBeNull();
+    const r = engine.step(s, CONT);
     expect(ctl.walks).toBe(3);
+    expect(r.continuing).toBe(false);
+    expect(s.occupation).toBeNull();
+  });
+
+  test('the occupation ends on ctx.interrupt() from an afterAction hook', () => {
+    ctl.interruptAt = 2;
+    const s = fresh();
+    engine.step(s, mod('fk:walk'));
+    expect(s.occupation).not.toBeNull();
+    engine.step(s, CONT);
+    expect(ctl.walks).toBe(2);
+    expect(s.occupation).toBeNull();
+  });
+
+  test('the occupation ends when the move cost nothing', () => {
+    ctl.walkCost = 0;
+    const s = fresh();
+    expect(engine.step(s, mod('fk:walk')).continuing).toBe(false);
+    expect(ctl.walks).toBe(1);
+    expect(s.occupation).toBeNull();
+  });
+
+  test('the occupation ends on game over', () => {
+    ctl.walkEndAt = 2;
+    const s = fresh();
+    engine.step(s, mod('fk:walk'));
+    expect(s.occupation).not.toBeNull();
+    engine.step(s, CONT);
     expect(s.gameOver?.killer).toBe('walked');
+    expect(s.occupation).toBeNull();
+  });
+
+  test('a beforeAction cancel clears the occupation', () => {
+    ctl.cancelWalk = true;
+    const s = fresh();
+    const r = engine.step(s, mod('fk:walk'));
+    expect(ctl.walks).toBe(0);
+    expect(r.continuing).toBe(false);
+    expect(s.occupation).toBeNull();
+  });
+
+  test('a prompt clears the occupation', () => {
+    ctl.askAt = 2;
+    const s = fresh();
+    engine.step(s, mod('fk:walk'));
+    expect(s.occupation).not.toBeNull();
+    const r = engine.step(s, CONT);
+    expect(r.prompt).not.toBeNull();
+    expect(s.occupation).toBeNull();
+    // answering a prompt works and leaves no occupation
+    engine.step(s, { type: 'answer', promptId: 'p1', value: true });
+    expect(s.occupation).toBeNull();
+  });
+
+  test('stepAll performs every move and concatenates the events', () => {
+    const s = fresh();
+    const t0 = s.turn;
+    const r = engine.stepAll(s, mod('fk:walk'));
+    expect(ctl.walks).toBe(5);
+    expect(s.turn).toBe(t0 + 5);
+    expect(r.continuing).toBe(false);
+    expect(r.events.filter((e) => e.type === 'searched')).toHaveLength(0);
+  });
+
+  test('stepAll stops at MAX_REPEAT', () => {
+    ctl.walkMax = Infinity;
+    const s = fresh();
+    const r = engine.stepAll(s, mod('fk:walk'));
+    expect(ctl.walks).toBe(MAX_REPEAT + 1); // the first step plus MAX_REPEAT continues
+    expect(r.continuing).toBe(true);
+  });
+
+  test('stepAll of a plain action is a single step', () => {
+    const s = fresh();
+    const t0 = s.turn;
+    engine.stepAll(s, WAIT);
+    expect(s.turn).toBe(t0 + 1);
+  });
+
+  test('the occupation saves and loads', () => {
+    const s = fresh();
+    engine.step(s, mod('fk:walk'));
+    const replay = { seed: 5, width: 40, height: 15, mods: [], actions: [] };
+    const loaded = engine.load(engine.save(s, replay)).state;
+    expect(loaded.occupation).toEqual(s.occupation);
+    expect(engine.step(loaded, CONT).continuing).toBe(true);
   });
 });
 
@@ -578,7 +704,7 @@ describe('newGame', () => {
     const r = engine.newGame({ seed: 3, width: 40, height: 15 });
     const s = r.state;
     expect(ctl.newGame).toEqual([{ hero: s.playerId, hadPos: false, levels: 0 }]);
-    expect(s.version).toBe(3);
+    expect(s.version).toBe(4);
     expect(s.gameOver).toBeNull();
     expect(s.pendingPrompt).toBeNull();
     expect(r.prompt).toBeNull();
@@ -636,12 +762,26 @@ describe('view additions', () => {
 describe('save format', () => {
   const replay = { seed: 5, width: 40, height: 15, mods: [], actions: [] };
 
-  test('round trip is version 3', () => {
+  test('round trip is version 4', () => {
     const s = fresh();
     const text = engine.save(s, replay);
     const raw = JSON.parse(text) as { version: number; state: { version: number } };
-    expect([raw.version, raw.state.version, SAVE_VERSION]).toEqual([3, 3, 3]);
+    expect([raw.version, raw.state.version, SAVE_VERSION]).toEqual([4, 4, 4]);
     expect(engine.load(text).state).toEqual(s);
+  });
+
+  test('a version-3 save migrates with no occupation', () => {
+    const s = fresh();
+    const raw = JSON.parse(engine.save(s, replay)) as {
+      version: number;
+      state: { version: number; occupation?: unknown };
+    };
+    raw.version = 3;
+    raw.state.version = 3;
+    delete raw.state.occupation;
+    const loaded = engine.load(JSON.stringify(raw)).state;
+    expect(loaded.version).toBe(4);
+    expect(loaded.occupation).toBeNull();
   });
 
   test('a version-1 save is rejected', () => {

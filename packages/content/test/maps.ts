@@ -76,7 +76,7 @@ export function mapSetup(rows: string[], opts: MapOpts = {}) {
   state.memory['dlvl1'] = memory;
   const pos = getPlayer(state).c.pos;
   if (pos) Object.assign(pos, { x: start.x, y: start.y });
-  const step = (a: PlayerAction) => engine.step(state, a);
+  const step = (a: PlayerAction) => engine.stepAll(state, a);
   step({ type: 'wait' });
   return { state, step, level, ctx: ctxFor(state) };
 }

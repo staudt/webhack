@@ -121,7 +121,7 @@ export function levelSetup(rows: string[] = ['.....', '..@..', '.....'], seed = 
   const hero = getPlayer(state);
   if (hero.c.pos) Object.assign(hero.c.pos, { level: 'dlvl1', x: start.x, y: start.y });
   if (hero.c.hp) hero.c.hp = { cur: 500, max: 500 };
-  const step = (a: PlayerAction): StepResult => engine.step(state, a);
+  const step = (a: PlayerAction): StepResult => engine.stepAll(state, a);
   const mod = (action: string, args?: Record<string, unknown>): StepResult =>
     step({ type: 'mod', action: action as DefId, ...(args ? { args: args as never } : {}) });
   const msgKeys = (r: StepResult): string[] =>

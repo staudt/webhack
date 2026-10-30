@@ -4,6 +4,29 @@ import type { FromCore, ToCore } from '../src/types/protocol';
 import { applyUpdate } from '../src/view';
 import type { ViewSnapshot } from '../src/types/view';
 import { fakeMod } from './helpers/fakeMod';
+import type { Mod } from '../src/types/mod';
+import { stateHash } from '../src/hash';
+import { createEngine } from '../src/engine';
+
+/** A three-move action whose progress lives in the occupation data. */
+const walkMod: Mod = {
+  id: 'wk',
+  version: '1.0.0',
+  register(api) {
+    api.defineAction({
+      id: 'wk:three',
+      labelKey: 'a.three',
+      handles: 'mod',
+      offer: () => [],
+      perform(ctx) {
+        const occ = ctx.state.occupation;
+        if (occ) occ.data = ((occ.data as number | null) ?? 0) + 1;
+        return 12;
+      },
+      continues: (ctx) => ((ctx.state.occupation?.data as number | null) ?? 0) < 3,
+    });
+  },
+};
 
 function make() {
   const out: FromCore[] = [];
@@ -115,5 +138,75 @@ describe('host', () => {
     c.send({ t: 'new', seed: replay.seed, width: replay.width, height: replay.height });
     for (const action of replay.actions) c.send({ t: 'act', action } as ToCore);
     expect(c.send({ t: 'hash' })).toEqual(h1);
+  });
+});
+
+describe('host with multi-turn actions', () => {
+  const three: ToCore = { t: 'act', action: { type: 'mod', action: 'wk:three' } };
+  const cont: ToCore = { t: 'act', action: { type: 'continue' } };
+  const mk = () => {
+    const out: FromCore[] = [];
+    const host = createHost([fakeMod, walkMod], (m) => void out.push(structuredClone(m)));
+    const send = (m: ToCore): FromCore => {
+      host.handle(structuredClone(m));
+      return out[out.length - 1]!;
+    };
+    return { send };
+  };
+  const continuing = (m: FromCore): boolean => m.t === 'view' && m.continuing;
+
+  test('view messages carry the continuing flag', () => {
+    const { send } = mk();
+    expect(continuing(send(NEW))).toBe(false);
+    expect(continuing(send(three))).toBe(true);
+    expect(continuing(send(cont))).toBe(true);
+    expect(continuing(send(cont))).toBe(false);
+    expect(continuing(send(cont))).toBe(false); // no occupation: a no-op
+  });
+
+  test('a loaded game with an occupation reports continuing on the full view', () => {
+    const a = mk();
+    a.send(NEW);
+    a.send(three);
+    const saved = a.send({ t: 'save' });
+    if (saved.t !== 'saved') throw new Error('not saved');
+    const b = mk();
+    expect(continuing(b.send({ t: 'load', save: saved.save }))).toBe(true);
+  });
+
+  test('the replay records continue actions and replays to the same hash', () => {
+    const a = mk();
+    a.send(NEW);
+    for (const m of [
+      three,
+      cont,
+      { t: 'act', action: { type: 'wait' } } as ToCore,
+      three,
+      cont,
+      cont,
+    ])
+      a.send(m);
+    const h = a.send({ t: 'hash' });
+    const saved = a.send({ t: 'save' });
+    if (saved.t !== 'saved') throw new Error('not saved');
+    const file = JSON.parse(saved.save) as {
+      replay: { seed: number; width: number; height: number; actions: { type: string }[] };
+    };
+    expect(file.replay.actions.map((x) => x.type)).toEqual([
+      'mod',
+      'continue',
+      'wait',
+      'mod',
+      'continue',
+      'continue',
+    ]);
+    const engine = createEngine([fakeMod, walkMod]);
+    const state = engine.newGame({
+      seed: file.replay.seed,
+      width: file.replay.width,
+      height: file.replay.height,
+    }).state;
+    for (const action of file.replay.actions) engine.step(state, action as never);
+    expect(h).toEqual({ t: 'hash', hash: stateHash(state) });
   });
 });

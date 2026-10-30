@@ -10,6 +10,7 @@ import {
   type Entity,
   type EntityId,
   type Msg,
+  type ModApi,
   type ObjectDef,
   type Offer,
   type PlayerAction,
@@ -291,6 +292,11 @@ function eatfood(ctx: Ctx): number {
  */
 export function stopOccupation(ctx: Ctx): void {
   ctx.interrupt();
+  interruptMeal(ctx);
+}
+
+/** The meal part of stop_occupation(): "You stop eating the X." and the food stays partly eaten. */
+function interruptMeal(ctx: Ctx): void {
   const v = victualOf(ctx);
   if (!v || !v.eating) return;
   v.eating = false;
@@ -304,6 +310,20 @@ export function stopOccupation(ctx: Ctx): void {
     return;
   }
   say(ctx, 'eat.stop', { item: foodName(ctx, piece) });
+}
+
+/**
+ * The engine drops `state.occupation` when any other action arrives (input cancels a meal) and
+ * also when something interrupted it. The meal itself lives in mod data, so before the next
+ * action that is not the meal's own `continue` we notice a meal still marked in progress and stop
+ * it like stop_occupation() does. A `continue` carries occupation data set by `continues`.
+ */
+export function registerEat(api: ModApi): void {
+  api.on('beforeAction', (ctx) => {
+    const v = victualOf(ctx);
+    if (v?.eating && v.pending && ctx.state.occupation?.data == null) interruptMeal(ctx);
+    return 'continue';
+  });
 }
 
 /** A visible hostile monster next to the hero. ref: src/hack.c monster_nearby() */
@@ -630,7 +650,8 @@ const eat: ActionDef = {
   },
   perform(ctx, action) {
     const v = victualOf(ctx);
-    if (v?.pending) return eatfood(ctx);
+    // a `continue` move of the meal in progress (the engine keeps occupation.data non-null)
+    if (v?.pending && ctx.state.occupation?.data != null) return eatfood(ctx);
     const id = itemArg(action);
     if (id === undefined) return 0;
     const e = ctx.state.entities[String(id)];
@@ -646,6 +667,7 @@ const eat: ActionDef = {
       return false;
     }
     v.pending = true;
+    if (ctx.state.occupation) ctx.state.occupation.data = { meal: true };
     return true;
   },
 };

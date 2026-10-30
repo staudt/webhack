@@ -185,7 +185,7 @@ const run: ActionDef = {
     const args = parseArgs(action);
     if (!args) return 0;
     const run = RUN_MODES[args.mode];
-    const s = beginSession(ctx, action, { dx: DIRS[args.dir].x, dy: DIRS[args.dir].y });
+    const s = beginSession(ctx, { dx: DIRS[args.dir].x, dy: DIRS[args.dir].y });
     // The first step is taken straight away; later ones look around first.
     if (s.moved && lookaround(ctx, s, run)) return 0;
     const level = getLevel(ctx.state);
@@ -216,10 +216,9 @@ const run: ActionDef = {
     }
     return cost;
   },
-  continues(ctx, action) {
-    const s = sessionOf(action);
+  continues(ctx) {
+    const s = sessionOf(ctx);
     if (!s) return false;
-    s.live = true;
     return !disturbed(ctx, s);
   },
 };

@@ -16,6 +16,7 @@ import type {
   ViewUpdate,
 } from '@nh/core';
 import {
+  DEFAULT_STEP_DELAY_MS,
   createUi,
   defaultKeymap,
   formatStr,
@@ -936,10 +937,13 @@ describe('run gestures', () => {
   test('g and G prefixes run in the next direction key', () => {
     const m = mk({ mods: [defaultKeymap, runMod], opts: gestures });
     ui = m.ui;
+    vi.useFakeTimers();
     key('g', 'KeyG');
     key('l', 'KeyL');
     key('G', 'KeyG', { shiftKey: true });
     key('ArrowUp', 'ArrowUp');
+    vi.advanceTimersByTime(200); // a lone arrow waits out the chord window
+    vi.useRealTimers();
     expect(m.acts).toEqual([
       { type: 'mod', action: 'x:run', args: { dir: 'e', mode: 'rush' } },
       { type: 'mod', action: 'x:run', args: { dir: 'n', mode: 'run' } },
@@ -959,5 +963,205 @@ describe('run gestures', () => {
       { type: 'move', dir: 'e' },
       { type: 'mod', action: 'x:run', args: { dir: 'n', mode: 'rush' } },
     ]);
+  });
+
+  test('g + two arrows within the chord window runs diagonally; G too', () => {
+    vi.useFakeTimers();
+    try {
+      const m = mk({ mods: [defaultKeymap, runMod], opts: gestures });
+      ui = m.ui;
+      key('g', 'KeyG');
+      key('ArrowUp', 'ArrowUp');
+      key('ArrowLeft', 'ArrowLeft');
+      keyUp('ArrowUp');
+      keyUp('ArrowLeft');
+      vi.advanceTimersByTime(200);
+      expect(m.acts).toEqual([prefixes.rush('nw')]);
+      key('G', 'KeyG', { shiftKey: true });
+      key('ArrowDown', 'ArrowDown');
+      key('ArrowRight', 'ArrowRight');
+      keyUp('ArrowDown');
+      keyUp('ArrowRight');
+      vi.advanceTimersByTime(200);
+      expect(m.acts).toEqual([prefixes.rush('nw'), prefixes.run('se')]);
+      // the prefix is spent: the next arrow is a plain move
+      key('ArrowUp', 'ArrowUp');
+      keyUp('ArrowUp');
+      vi.advanceTimersByTime(200);
+      expect(m.acts[2]).toEqual({ type: 'move', dir: 'n' });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test('g + Shift+arrow pairs and g + hjklyubn still run', () => {
+    vi.useFakeTimers();
+    try {
+      const m = mk({ mods: [defaultKeymap, runMod], opts: gestures });
+      ui = m.ui;
+      key('g', 'KeyG');
+      key('ArrowUp', 'ArrowUp', { shiftKey: true });
+      key('ArrowRight', 'ArrowRight', { shiftKey: true });
+      vi.advanceTimersByTime(200);
+      expect(m.acts).toEqual([prefixes.rush('ne')]);
+      key('g', 'KeyG');
+      key('y', 'KeyY');
+      expect(m.acts[1]).toEqual(prefixes.rush('nw'));
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
+describe('multi-turn actions in the UI', () => {
+  const CONT: PlayerAction = { type: 'continue' };
+  const travelOffer: ActionOffer = {
+    action: { type: 'mod', action: 'x:travel', args: { x: 20, y: 5 } },
+    labelKey: 'Travel',
+    source: 't',
+  };
+  const runOffer: ActionOffer = {
+    action: { type: 'mod', action: 'x:run', args: { dir: 'e', mode: 'rush' } },
+    labelKey: 'Run',
+    source: 't',
+  };
+  const setup = (opts: Partial<UiOptions> = {}) => {
+    vi.useFakeTimers();
+    const m = mk({ opts: { doubleTap: { action: 'x:run' }, ...opts } });
+    ui = m.ui;
+    m.ui.update(view(5, 5), [], null);
+    m.renderer.cell = { x: 20, y: 5 };
+    m.state.offers = [travelOffer, runOffer];
+    return m;
+  };
+  afterEach(() => vi.useRealTimers());
+  const mapOf = (m: { root: Element }) => m.root.querySelector('.nh-map') as Element;
+
+  test('continue is sent after the step delay while continuing', () => {
+    const m = setup();
+    m.ui.update(view(), [], null, true);
+    vi.advanceTimersByTime(DEFAULT_STEP_DELAY_MS - 1);
+    expect(m.acts).toEqual([]);
+    vi.advanceTimersByTime(1);
+    expect(m.acts).toEqual([CONT]);
+    // the next view keeps it going; one that is not continuing stops it
+    m.ui.update(view(), [], null, true);
+    vi.advanceTimersByTime(DEFAULT_STEP_DELAY_MS);
+    expect(m.acts).toEqual([CONT, CONT]);
+    m.ui.update(view(), [], null, false);
+    vi.advanceTimersByTime(1000);
+    expect(m.acts).toHaveLength(2);
+  });
+
+  test('stepDelayMs configures the delay', () => {
+    const m = setup({ stepDelayMs: 200 });
+    m.ui.update(view(), [], null, true);
+    vi.advanceTimersByTime(199);
+    expect(m.acts).toEqual([]);
+    vi.advanceTimersByTime(1);
+    expect(m.acts).toEqual([CONT]);
+  });
+
+  test('a key cancels and is swallowed; nothing continues afterwards', () => {
+    const m = setup();
+    m.ui.update(view(), [], null, true);
+    vi.advanceTimersByTime(30);
+    key('k', 'KeyK');
+    vi.advanceTimersByTime(1000);
+    expect(m.acts).toEqual([]);
+    key('k', 'KeyK'); // the next key is a normal move
+    expect(m.acts).toEqual([{ type: 'move', dir: 'n' }]);
+  });
+
+  test('both arrows of a diagonal pressed to cancel are swallowed', () => {
+    const m = setup();
+    m.ui.update(view(), [], null, true);
+    key('ArrowUp', 'ArrowUp');
+    key('ArrowLeft', 'ArrowLeft');
+    vi.advanceTimersByTime(1000);
+    expect(m.acts).toEqual([]);
+  });
+
+  test('a bare Shift does not cancel', () => {
+    const m = setup();
+    m.ui.update(view(), [], null, true);
+    key('Shift', 'ShiftLeft', { shiftKey: true });
+    vi.advanceTimersByTime(DEFAULT_STEP_DELAY_MS);
+    expect(m.acts).toEqual([CONT]);
+  });
+
+  test('a tap on the map cancels and is swallowed', async () => {
+    const m = setup();
+    m.ui.update(view(), [], null, true);
+    m.state.offers = [travelOffer];
+    tap(mapOf(m));
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(m.acts).toEqual([]);
+    tap(mapOf(m));
+    await vi.advanceTimersByTimeAsync(10);
+    expect(m.acts).toEqual([travelOffer.action]);
+  });
+
+  test('a bar button cancels and is swallowed', () => {
+    const m = setup();
+    m.ui.update(view(), [], null, true);
+    (m.root.querySelector('.nh-bar button') as HTMLButtonElement).click();
+    vi.advanceTimersByTime(1000);
+    expect(m.acts).toEqual([]);
+    expect(m.root.querySelector('.nh-sheet')).toBeNull();
+    (m.root.querySelector('.nh-bar button') as HTMLButtonElement).click();
+    expect(m.root.querySelector('.nh-sheet')).not.toBeNull();
+  });
+
+  test('cancelling while a continue is in flight ignores the view it brings', () => {
+    const m = setup();
+    m.ui.update(view(), [], null, true);
+    vi.advanceTimersByTime(DEFAULT_STEP_DELAY_MS);
+    expect(m.acts).toEqual([CONT]);
+    key('k', 'KeyK'); // swallowed: cancels
+    m.ui.update(view(), [], null, true); // the in-flight continue's view
+    vi.advanceTimersByTime(1000);
+    expect(m.acts).toEqual([CONT]);
+    // a later travel animates again
+    m.ui.update(view(), [], null, true);
+    vi.advanceTimersByTime(DEFAULT_STEP_DELAY_MS);
+    expect(m.acts).toEqual([CONT, CONT]);
+  });
+
+  test('the second tap of a double tap during a continuing travel starts the run', async () => {
+    const m = setup();
+    tap(mapOf(m));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(m.acts).toEqual([travelOffer.action]);
+    m.ui.update(view(), [], null, true); // the travel is continuing
+    await vi.advanceTimersByTimeAsync(20);
+    tap(mapOf(m));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(m.acts).toEqual([travelOffer.action, runOffer.action]);
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(m.acts).toHaveLength(2); // no continue for the replaced travel
+  });
+
+  test('a prompt stops continuing', () => {
+    const m = setup();
+    const prompt: Prompt = { id: 'p', kind: 'yn', key: 'q' };
+    m.ui.update(view(), [], prompt, true);
+    vi.advanceTimersByTime(1000);
+    expect(m.acts).toEqual([]);
+  });
+
+  test('game over stops continuing', () => {
+    const m = setup();
+    m.ui.update({ ...view(), status: { dead: 'died' } }, [], null, true);
+    vi.advanceTimersByTime(1000);
+    expect(m.acts).toEqual([]);
+  });
+
+  test('destroy cancels the pending continue', () => {
+    const m = setup();
+    m.ui.update(view(), [], null, true);
+    m.ui.destroy();
+    vi.advanceTimersByTime(1000);
+    expect(m.acts).toEqual([]);
   });
 });

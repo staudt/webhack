@@ -31,7 +31,7 @@ export function createHost(
 
   const sendFull = (state: GameState, events: GameEvent[]): void => {
     mirror = buildSnapshot(engine.registry, state);
-    post({ t: 'view', view: mirror, events, prompt: null });
+    post({ t: 'view', view: mirror, events, prompt: null, continuing: state.occupation !== null });
   };
 
   const dispatch = (msg: ToCore): void => {
@@ -74,12 +74,12 @@ export function createHost(
       }
       case 'act': {
         const g = requireGame();
-        const { events, prompt } = engine.step(g.state, msg.action);
+        const { events, prompt, continuing } = engine.step(g.state, msg.action);
         g.replay.actions.push(JSON.parse(JSON.stringify(msg.action)) as typeof msg.action);
         const next = buildSnapshot(engine.registry, g.state);
         const view = mirror ? diffSnapshot(mirror, next) : next;
         mirror = applyUpdate(mirror, view);
-        post({ t: 'view', view, events, prompt });
+        post({ t: 'view', view, events, prompt, continuing });
         return;
       }
       case 'query': {

@@ -29,7 +29,7 @@ export interface Chord {
 type Cardinal = 'n' | 's' | 'e' | 'w';
 
 /** The direction a command carries: a `move`, or a mod action whose `args.dir` is a direction. */
-function dirOf(cmd: UiCommand): string | null {
+export function dirOf(cmd: UiCommand): string | null {
   if (cmd.type !== 'action') return null;
   const a = cmd.action;
   if (a.type === 'move') return a.dir;

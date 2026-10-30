@@ -113,7 +113,7 @@ remote.onView((m) => {
     void clearSave();
   }
   if (m.view.kind === 'full') size = { w: m.view.width, h: m.view.height };
-  ui.update(m.view, m.events, m.prompt);
+  ui.update(m.view, m.events, m.prompt, m.continuing);
 });
 remote.onError((e) => {
   if (loading) {

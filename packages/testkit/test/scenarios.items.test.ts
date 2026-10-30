@@ -71,7 +71,7 @@ describe('item scenarios', () => {
       .find((o) => o.labelKey === 'action.nh:eat');
     expect(offer).toBeDefined();
     for (let i = 0; i < 12 && i < 11; i++) {
-      r.engine.step(r.state, i === 0 ? offer!.action : { type: 'wait' });
+      r.engine.stepAll(r.state, i === 0 ? offer!.action : { type: 'wait' });
     }
     expect(getPlayer(r.state).c.hunger!.nutrition).toBeGreaterThan(300);
   });

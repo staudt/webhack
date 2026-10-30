@@ -21,7 +21,7 @@ import { computeVisible, newMemory, updateMemory } from './vision';
 
 export const DEFAULT_WIDTH = 80;
 export const DEFAULT_HEIGHT = 21;
-/** Upper bound on repeats of one multi-turn action (travel) per step. */
+/** Upper bound on the moves `stepAll` performs for one multi-turn action. */
 export const MAX_REPEAT = 1000;
 
 export interface NewGameOptions {
@@ -35,8 +35,13 @@ export interface NewGameOptions {
 export interface Engine {
   readonly registry: Registry;
   newGame(opts: NewGameOptions): StepResult;
-  /** Mutates `state` in place and returns it in the result. */
+  /**
+   * Mutates `state` in place and returns it in the result. A multi-turn action performs one
+   * move; while `continuing`, send `{ type: 'continue' }` for each further move.
+   */
   step(state: GameState, action: PlayerAction): StepResult;
+  /** `step`, then `continue` until the multi-turn action ends; events are concatenated. */
+  stepAll(state: GameState, action: PlayerAction): StepResult;
   query(state: GameState): CoreQuery;
   save(state: GameState, replay: Replay): string;
   load(text: string): { state: GameState; replay: Replay };
@@ -213,6 +218,7 @@ export function createEngine(mods: readonly Mod[], opts: EngineOptions = {}): En
     state,
     events,
     prompt: state.pendingPrompt?.prompt ?? null,
+    continuing: state.occupation !== null,
   });
 
   const engine: Engine = {
@@ -223,7 +229,7 @@ export function createEngine(mods: readonly Mod[], opts: EngineOptions = {}): En
       if (!roleDef) throw new Error('No player role registered');
       const s = seed >>> 0;
       const state: GameState = {
-        version: 3,
+        version: 4,
         seed: s,
         turn: 1,
         nextEntityId: 1,
@@ -243,6 +249,7 @@ export function createEngine(mods: readonly Mod[], opts: EngineOptions = {}): En
         modData: {},
         gameOver: null,
         pendingPrompt: null,
+        occupation: null,
       };
       const events: GameEvent[] = [];
       const ctx = makeCtx(state, events);
@@ -283,25 +290,54 @@ export function createEngine(mods: readonly Mod[], opts: EngineOptions = {}): En
         const def = registry.actions.find((a) => a.id === pending.handler);
         if (!def?.answer) throw new Error(`Prompt handler '${pending.handler}' has no answer()`);
         state.pendingPrompt = null;
+        state.occupation = null;
         spend(state, def, def.answer(ctx, action.value, pending.data));
         advanceTime(ctx);
         refreshVision(state);
         return result(state, events);
       }
 
-      const def = findHandler(action);
-      for (let repeat = 0; repeat < MAX_REPEAT; repeat++) {
-        if (registry.hooks('beforeAction').some((h) => h.fn(ctx, action) === 'cancel')) break;
-        const cost = def.perform(ctx, action);
-        spend(state, def, cost);
-        refreshVision(state);
-        for (const h of registry.hooks('afterAction')) h.fn(ctx, action);
-        advanceTime(ctx);
-        refreshVision(state);
-        if (cost === 0 || ctx.interrupted || state.gameOver || state.pendingPrompt) break;
-        if (!def.continues?.(ctx, action)) break;
+      // A multi-turn action runs one move per step: `continue` performs its next move, any
+      // other action cancels it first (ref: NetHack interrupting an occupation).
+      let act: PlayerAction = action;
+      if (action.type === 'continue') {
+        if (!state.occupation) return result(state, events);
+        act = state.occupation.action;
+      } else {
+        state.occupation = null;
       }
+      const def = findHandler(act);
+      if (action.type !== 'continue' && def.continues)
+        state.occupation = { action: JSON.parse(JSON.stringify(act)) as PlayerAction, data: null };
+      if (registry.hooks('beforeAction').some((h) => h.fn(ctx, act) === 'cancel')) {
+        state.occupation = null;
+        return result(state, events);
+      }
+      const cost = def.perform(ctx, act);
+      spend(state, def, cost);
+      refreshVision(state);
+      for (const h of registry.hooks('afterAction')) h.fn(ctx, act);
+      advanceTime(ctx);
+      refreshVision(state);
+      const keep =
+        state.occupation !== null &&
+        cost > 0 &&
+        !ctx.interrupted &&
+        !state.gameOver &&
+        !state.pendingPrompt &&
+        (def.continues?.(ctx, act) ?? false);
+      if (!keep) state.occupation = null;
       return result(state, events);
+    },
+
+    stepAll(state, action) {
+      let r = engine.step(state, action);
+      const events = [...r.events];
+      for (let i = 0; r.continuing && i < MAX_REPEAT; i++) {
+        r = engine.step(state, { type: 'continue' });
+        events.push(...r.events);
+      }
+      return { ...r, events };
     },
 
     query: (state) => createQuery(registry, state),

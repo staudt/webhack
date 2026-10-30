@@ -590,7 +590,7 @@ export function runScenario(
       events = [];
       for (const a of Array.isArray(action) ? action : [action]) {
         if (state.gameOver) break; // later actions are moot once the hero is dead
-        events.push(...engine.step(state, a).events);
+        events.push(...engine.stepAll(state, a).events);
       }
     },
     expectEvent(partial) {
