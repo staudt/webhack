@@ -19,6 +19,7 @@ import {
   type TerrainDef,
   rnl,
 } from '@nh/core';
+import { heroAttack, monsterIdAt } from './combat';
 import { T } from './terrain';
 
 function playerAt(ctx: Ctx): Pos {
@@ -45,6 +46,18 @@ const move: ActionDef = {
     const dir = dirTo(from, target.pos);
     if (!dir) return [];
     const level = getLevel(ctx.state);
+    // A visible monster there turns the move into an attack (allowed diagonally through doors).
+    const seen = ctx.query
+      .describe(target.pos)
+      .entities.find((e) => ctx.defs.isMonster(e.def));
+    if (seen)
+      return [
+        {
+          action: { type: 'move', dir },
+          labelKey: 'action.attack',
+          params: { target: `@${seen.def}` },
+        },
+      ];
     const check = checkStep(level, cellRules(level, ctx.defs), from, dir);
     if (!check.ok && check.reason !== 'closedDoor') return [];
     const offer: Offer = {
@@ -63,6 +76,11 @@ const move: ActionDef = {
     const from = { x: pos.x, y: pos.y };
     const d = DIRS[action.dir];
     const to = { x: from.x + d.x, y: from.y + d.y };
+    // ref: src/hack.c domove(): a monster at the target is attacked before test_move() is
+    // consulted, so attacks work diagonally through doorways. (domove_core's "don't attack if
+    // running" check belongs to travel/run, which is a different action.)
+    const victim = monsterIdAt(ctx, to, pos.level);
+    if (victim !== null) return heroAttack(ctx, victim);
     const check = checkStep(level, cellRules(level, ctx.defs), from, action.dir);
     if (check.ok) {
       // ref: src/hack.c domove()
