@@ -49,6 +49,11 @@ export function autoFontSize(cssWidth: number): number {
   return Math.min(24, Math.max(14, Math.round(cssWidth / 27 / 0.6)));
 }
 
+/** The object glyph id to draw over a cell's terrain (under creatures), or null. */
+export function objectLayer(c: ViewCell): DefId | null {
+  return c.o ?? null;
+}
+
 export function createAsciiRenderer(opts: AsciiRendererOptions = {}): AsciiRenderer {
   const fontFamily = opts.fontFamily ?? DEFAULT_FONT;
   const background = opts.background ?? '#000';
@@ -155,7 +160,16 @@ export function createAsciiRenderer(opts: AsciiRendererOptions = {}): AsciiRende
       for (let x = r.x0; x < r.x1; x++) {
         const c = cells[y * width + x];
         if (!c || c.g === null) continue;
-        atlas.draw(ctx, glyphFor(c.g), !c.v, x * cellW - ox, dy, cellW, cellH);
+        const px = x * cellW - ox;
+        const top = objectLayer(c);
+        if (top !== null) {
+          // Objects replace the terrain glyph; dimmed when only remembered.
+          ctx.fillStyle = background;
+          ctx.fillRect(px, dy, cellW, cellH);
+          atlas.draw(ctx, glyphFor(top), !c.v, px, dy, cellW, cellH);
+        } else {
+          atlas.draw(ctx, glyphFor(c.g), !c.v, px, dy, cellW, cellH);
+        }
       }
     }
     for (const e of entities) {

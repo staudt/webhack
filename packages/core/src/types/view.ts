@@ -1,12 +1,28 @@
-import type { DefId, EntityId, Glyph, LevelId, Pos } from './common';
+import type { DefId, EntityId, Glyph, LevelId, Msg, Pos } from './common';
+import type { EquipSlot } from './entity';
+import type { ObjectClass } from './mod';
 
 export interface ViewCell {
   /** Remembered terrain glyph key, or null if never seen. */
   g: DefId | null;
   /** Visible this turn. */
   v: boolean;
+  /** Top object's shown id: seen now if visible, else remembered. Absent when none. */
+  o?: DefId;
 }
 
+/** An item in the hero's inventory, as the player knows it. */
+export interface ViewItem {
+  id: EntityId;
+  letter: string | null;
+  /** Shown id (the appearance for randomized objects); a legend key. */
+  g: DefId;
+  cls: ObjectClass;
+  name: Msg;
+  equipped: EquipSlot | null;
+}
+
+/** A creature (hero or monster). Objects are in `ViewCell.o` and `inventory`. */
 export interface ViewEntity {
   id: EntityId;
   g: DefId;
@@ -34,6 +50,7 @@ export interface ViewSnapshot {
   player: ViewPlayer;
   turn: number;
   status: Status;
+  inventory: ViewItem[];
 }
 
 export interface ViewDelta {
@@ -45,6 +62,8 @@ export interface ViewDelta {
   entities: ViewEntity[];
   player: ViewPlayer;
   status: Status;
+  /** Full inventory list. */
+  inventory: ViewItem[];
 }
 
 export type ViewUpdate = ViewSnapshot | ViewDelta;

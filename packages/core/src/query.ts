@@ -1,5 +1,6 @@
 import type { DefId } from './types/common';
 import { cellRules } from './movement';
+import { isItem, itemsAt, shownId } from './objects';
 import { findPath } from './path';
 import { getLevel, isVisible, playerPos } from './state';
 import type { Pos } from './types/common';
@@ -27,7 +28,13 @@ export function createQuery(registry: Registry, state: GameState): CoreQuery {
   const query: CoreQuery = {
     describe(pos: Pos): Description {
       const level = getLevel(state);
-      const none: Description = { terrain: null, remembered: false, visible: false, entities: [] };
+      const none: Description = {
+        terrain: null,
+        remembered: false,
+        visible: false,
+        entities: [],
+        objects: [],
+      };
       if (!inBounds(level, pos.x, pos.y)) return none;
       const i = cellIndex(level, pos.x, pos.y);
       const mem = state.memory[level.id]?.[i] ?? -1;
@@ -36,16 +43,29 @@ export function createQuery(registry: Registry, state: GameState): CoreQuery {
         ? sortedIds(state).flatMap((id) => {
             const e = state.entities[String(id)];
             const p = e?.c.pos;
-            return e && p && p.level === level.id && p.x === pos.x && p.y === pos.y
+            return e &&
+              p &&
+              p.level === level.id &&
+              p.x === pos.x &&
+              p.y === pos.y &&
+              !isItem(registry, e)
               ? [{ id: e.id, def: e.def }]
               : [];
           })
+        : [];
+      const objects = visible
+        ? itemsAt(registry, state, level.id, pos.x, pos.y).map((e) => ({
+            id: e.id,
+            def: shownId(state, e.def),
+            name: registry.itemName(state, e),
+          }))
         : [];
       return {
         terrain: mem >= 0 ? shownTerrain(registry, level.palette[mem]) : null,
         remembered: mem >= 0,
         visible,
         entities,
+        objects,
       };
     },
 
@@ -68,6 +88,8 @@ export function createQuery(registry: Registry, state: GameState): CoreQuery {
         endGame: forbidden('end the game'),
       };
       if (state.gameOver || state.pendingPrompt) return [];
+      if (t.kind === 'item' && state.entities[String(t.id)]?.c.item?.carriedBy !== state.playerId)
+        return [];
       return registry.actions.flatMap((def) =>
         def.offer(ctx, t).map((o) => ({ ...o, source: def.mod })),
       );

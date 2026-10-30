@@ -1,4 +1,5 @@
 import type { ViewUpdate } from '@nh/core';
+import { uiMessagesEn } from './i18n';
 
 type Status = ViewUpdate['status'];
 
@@ -29,8 +30,23 @@ const num = (s: Status, k: string): number | undefined => {
   return typeof v === 'number' ? v : undefined;
 };
 
+const HUNGER_CLASS: Record<string, string> = {
+  hungry: 'nh-hp-warn',
+  weak: 'nh-hp-crit',
+  fainting: 'nh-hp-crit',
+  fainted: 'nh-hp-crit',
+};
+const ENC_CLASS: Record<string, string> = {
+  strained: 'nh-hp-crit',
+  overtaxed: 'nh-hp-crit',
+  overloaded: 'nh-hp-crit',
+};
+
 /** The two NetHack bottom lines; missing fields are omitted. ref: src/botl.c */
-export function statusLines(s: Status): [StatusField[], StatusField[]] {
+export function statusLines(
+  s: Status,
+  t: (key: string) => string = (k) => uiMessagesEn[k] ?? k,
+): [StatusField[], StatusField[]] {
   const l1: StatusField[] = [];
   const l2: StatusField[] = [];
   const str = num(s, 'str');
@@ -47,6 +63,8 @@ export function statusLines(s: Status): [StatusField[], StatusField[]] {
   }
   const dlvl = num(s, 'dlvl');
   if (dlvl !== undefined) l2.push({ text: `Dlvl:${dlvl}` });
+  const gold = num(s, 'gold');
+  if (gold !== undefined) l2.push({ text: `$:${gold}` });
   const hp = num(s, 'hp');
   const hpmax = num(s, 'hpmax');
   if (hp !== undefined && hpmax !== undefined) {
@@ -61,6 +79,16 @@ export function statusLines(s: Status): [StatusField[], StatusField[]] {
   }
   const turn = num(s, 'turn');
   if (turn !== undefined) l2.push({ text: `T:${turn}` });
+  const hunger = s['hunger'];
+  if (typeof hunger === 'string') {
+    const cls = HUNGER_CLASS[hunger];
+    l2.push({ text: t(`ui.status.${hunger}`), ...(cls ? { cls } : {}) });
+  }
+  const enc = s['encumbrance'];
+  if (typeof enc === 'string') {
+    const cls = ENC_CLASS[enc];
+    l2.push({ text: t(`ui.status.${enc}`), ...(cls ? { cls } : {}) });
+  }
   return [l1, l2];
 }
 

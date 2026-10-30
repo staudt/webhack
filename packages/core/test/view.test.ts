@@ -84,6 +84,7 @@ describe('view', () => {
         entities: [],
         player: a.player,
         status: {},
+        inventory: [],
       }),
     ).toThrow();
     const before = structuredClone(a);
@@ -94,6 +95,7 @@ describe('view', () => {
       entities: [],
       player: a.player,
       status: {},
+      inventory: [],
     });
     expect(a).toEqual(before);
   });

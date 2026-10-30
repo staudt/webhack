@@ -61,6 +61,8 @@ const monDef = (name: string, brain: `${string}:${string}`): MonsterDef => ({
   group: null,
   genFlags: [],
   difficulty: 1,
+  weight: 100,
+  nutrition: 100,
   brain,
 });
 
@@ -576,7 +578,7 @@ describe('newGame', () => {
     const r = engine.newGame({ seed: 3, width: 40, height: 15 });
     const s = r.state;
     expect(ctl.newGame).toEqual([{ hero: s.playerId, hadPos: false, levels: 0 }]);
-    expect(s.version).toBe(2);
+    expect(s.version).toBe(3);
     expect(s.gameOver).toBeNull();
     expect(s.pendingPrompt).toBeNull();
     expect(r.prompt).toBeNull();
@@ -633,14 +635,14 @@ describe('view additions', () => {
   });
 });
 
-describe('save v2', () => {
+describe('save format', () => {
   const replay = { seed: 5, width: 40, height: 15, mods: [], actions: [] };
 
-  test('round trip is version 2', () => {
+  test('round trip is version 3', () => {
     const s = fresh();
     const text = engine.save(s, replay);
     const raw = JSON.parse(text) as { version: number; state: { version: number } };
-    expect([raw.version, raw.state.version, SAVE_VERSION]).toEqual([2, 2, 2]);
+    expect([raw.version, raw.state.version, SAVE_VERSION]).toEqual([3, 3, 3]);
     expect(engine.load(text).state).toEqual(s);
   });
 

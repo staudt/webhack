@@ -44,6 +44,8 @@ describe('vanilla monsters', () => {
       group: null,
       genFlags: ['geno'],
       difficulty: 1,
+      weight: 10,
+      nutrition: 20,
       brain: 'nh:melee',
     });
   });
@@ -60,6 +62,8 @@ describe('vanilla monsters', () => {
       frequency: 3,
       group: 'small',
       difficulty: 1,
+      weight: 300,
+      nutrition: 250,
     });
   });
 
@@ -74,6 +78,8 @@ describe('vanilla monsters', () => {
       frequency: 2,
       group: 'large',
       difficulty: 4,
+      weight: 1000,
+      nutrition: 200,
     });
   });
 

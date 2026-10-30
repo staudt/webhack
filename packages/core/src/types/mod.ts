@@ -1,6 +1,6 @@
 import type { ActionType, PlayerAction } from './action';
-import type { DefId, EntityId, Glyph, Json } from './common';
-import type { Entity } from './entity';
+import type { DefId, EntityId, Glyph, Json, Msg } from './common';
+import type { ArmorSlot, Dice, Entity } from './entity';
 import type { GameEvent } from './event';
 import type { Level } from './level';
 import type { ActionOffer, CoreQuery, Target } from './query';
@@ -26,7 +26,70 @@ export interface RoleDef {
   speed: number;
   /** The player's map glyph; the player entity's `def` is the role id. */
   glyph: Glyph;
+  /** Movement gained at the end of each turn (ref: src/allmain.c u_calc_moveamt); defaults to speed. */
+  movement?(ctx: Ctx, hero: EntityId): number;
 }
+
+/** ref: include/objclass.h enum obj_class_types (the classes implemented so far). */
+export type ObjectClass = 'weapon' | 'armor' | 'food' | 'potion' | 'scroll' | 'coin';
+
+/** An object type, ported from struct objclass (ref: include/objclass.h, include/objects.h). */
+export interface ObjectDef {
+  id: DefId;
+  /** The actual name ("potion of healing"). */
+  nameKey: string;
+  class: ObjectClass;
+  glyph: Glyph;
+  /** Fixed unidentified description ("crude dagger"); classes with shuffled appearances leave it out. */
+  descKey?: string;
+  /** Generation probability within its class (oc_prob). */
+  prob: number;
+  /** oc_weight */
+  weight: number;
+  /** oc_cost */
+  cost: number;
+  /** One of NetHack's materials, lowercased ('iron', 'wood', 'cloth', 'glass', ...). */
+  material: string;
+  /** oc_merge: equal instances stack. */
+  merge: boolean;
+  /** oc_magic */
+  magic: boolean;
+  /** oc_delay: turns to put on/take off armor, or to eat. */
+  delay: number;
+  weapon?: {
+    small: Dice;
+    large: Dice;
+    /** oc_hitbon */
+    hitBonus: number;
+    /** Weapon skill name, e.g. 'dagger', 'spear'. */
+    skill: string;
+    bimanual: boolean;
+    kind: 'pierce' | 'slash' | 'whack';
+  };
+  armor?: { slot: ArmorSlot; ac: number; mc: number };
+  food?: { nutrition: number };
+  /** Effect when quaffed or read; called by content's actions. */
+  use?(ctx: Ctx, user: EntityId, item: EntityId): void;
+}
+
+/** A randomized description ("ruby potion") with its glyph; assigned per game via `state.appearances`. */
+export interface AppearanceDef {
+  id: DefId;
+  nameKey: string;
+  class: ObjectClass;
+  glyph: Glyph;
+}
+
+/** A bottom-line field computed from state (AC, gold, hunger); null leaves it out. ref: src/botl.c */
+export interface StatusDef {
+  id: DefId;
+  /** Key in `ViewSnapshot.status`; a def may replace a built-in field. */
+  field: string;
+  value(state: Readonly<GameState>, defs: Registry): string | number | null;
+}
+
+/** Names an item for the player, from player knowledge only (ref: src/objnam.c doname). */
+export type ItemNamer = (state: Readonly<GameState>, defs: Registry, item: Entity) => Msg;
 
 /** An offer as returned by `ActionDef.offer`; the engine adds `source`. */
 export type Offer = Omit<ActionOffer, 'source'>;
@@ -96,6 +159,10 @@ export interface MonsterDef {
   /** Extra generation flags, e.g. 'nogen', 'nohell', 'genocidable'. */
   genFlags: string[];
   difficulty: number;
+  /** Corpse weight (cwt). */
+  weight: number;
+  /** Corpse nutrition (cnutrit). */
+  nutrition: number;
   /** BrainDef that runs this monster's turns. */
   brain: DefId;
 }
@@ -162,6 +229,11 @@ export interface ModApi {
   defineTimer(d: TimerDef): void;
   defineMonster(d: MonsterDef): void;
   defineBrain(d: BrainDef): void;
+  defineObject(d: ObjectDef): void;
+  defineAppearance(d: AppearanceDef): void;
+  defineStatus(d: StatusDef): void;
+  /** Replaces the item namer; the last mod to set it wins. */
+  setItemNamer(fn: ItemNamer): void;
   on<K extends HookName>(hook: K, fn: Hooks[K], opts?: HookOptions): void;
 }
 
@@ -189,8 +261,20 @@ export interface Registry {
   monster(id: DefId): MonsterDef;
   isMonster(id: DefId): boolean;
   brain(id: DefId): BrainDef;
+  object(id: DefId): ObjectDef;
+  isObject(id: DefId): boolean;
+  appearance(id: DefId): AppearanceDef;
+  isAppearance(id: DefId): boolean;
+  /** Names an item with the active namer (a default one if no mod set it). */
+  itemName(state: Readonly<GameState>, item: Entity): Msg;
   /** In registration order. */
   readonly monsters: readonly MonsterDef[];
+  /** In registration order. */
+  readonly objects: readonly ObjectDef[];
+  /** In registration order. */
+  readonly appearances: readonly AppearanceDef[];
+  /** In registration order (later defs win for the same field). */
+  readonly statuses: readonly StatusDef[];
   readonly roles: readonly RoleDef[];
   readonly terrains: readonly TerrainDef[];
   /** In registration order. */

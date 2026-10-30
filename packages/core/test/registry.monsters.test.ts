@@ -30,6 +30,8 @@ const monster = (name: string, extra: Record<string, unknown> = {}): MonsterDef 
     group: null,
     genFlags: [],
     difficulty: 2,
+    weight: 100,
+    nutrition: 100,
     brain: 'm:b',
     ...extra,
   }) as MonsterDef;

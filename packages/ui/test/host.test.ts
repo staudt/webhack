@@ -11,6 +11,7 @@ import type {
   Pos,
   Prompt,
   Renderer,
+  ViewItem,
   ViewUpdate,
 } from '@nh/core';
 import {
@@ -51,7 +52,13 @@ function fakeGame() {
   const acts: PlayerAction[] = [];
   const state = {
     offers: [] as ActionOffer[],
-    desc: { terrain: null, remembered: false, visible: false, entities: [] } as Description,
+    desc: {
+      terrain: null,
+      remembered: false,
+      visible: false,
+      entities: [],
+      objects: [],
+    } as Description,
     describeCalls: [] as Pos[],
   };
   const query = {
@@ -73,6 +80,7 @@ const view = (x = 5, y = 5): ViewUpdate => ({
   entities: [],
   player: { id: 1, x, y },
   status: {},
+  inventory: [],
 });
 const flush = () => new Promise((r) => setTimeout(r, 0));
 const key = (k: string, code = k, init: KeyboardEventInit = {}) =>
@@ -203,7 +211,13 @@ describe('host', () => {
     m.ui.update(view(), [], null);
     m.renderer.cell = { x: 6, y: 5 };
     m.state.offers = [offer('e')];
-    m.state.desc = { terrain: 'nh:floor', remembered: true, visible: false, entities: [] };
+    m.state.desc = {
+      terrain: 'nh:floor',
+      remembered: true,
+      visible: false,
+      entities: [],
+      objects: [],
+    };
     (m.root.querySelector('.nh-look-btn') as HTMLElement).click();
     tap(m.root.querySelector('.nh-map')!);
     await flush();
@@ -214,6 +228,7 @@ describe('host', () => {
       remembered: true,
       visible: true,
       entities: [{ id: 2, def: 'nh:newt' }],
+      objects: [],
     };
     m.renderer.cell = { x: 9, y: 9 };
     m.state.offers = [];
@@ -455,5 +470,252 @@ describe('status bar, tombstone, tap to act', () => {
     tap(m.root.querySelector('.nh-map') as Element);
     await flush();
     expect(m.state.describeCalls).toEqual([{ x: 20, y: 5 }]);
+  });
+});
+
+const item = (
+  id: number,
+  letter: string,
+  cls: ViewItem['cls'],
+  name: string,
+  eq = false,
+): ViewItem => ({
+  id,
+  letter,
+  g: `nh:${name}`,
+  cls,
+  name: { key: `obj.${name}` },
+  equipped: eq ? (cls === 'weapon' ? 'weapon' : 'body') : null,
+});
+const invView = (inventory: ViewItem[]): ViewUpdate =>
+  ({
+    kind: 'full',
+    levelId: 'l',
+    width: 1,
+    height: 1,
+    legend: { 'nh:dagger': { ch: ')', fg: '#0ff' } },
+    cells: [],
+    entities: [],
+    player: { id: 1, x: 5, y: 5 },
+    turn: 1,
+    status: {},
+    inventory,
+  }) as unknown as ViewUpdate;
+const msgs = { 'obj.dagger': 'a dagger', 'obj.ration': 'a food ration', 'obj.mail': 'a mail' };
+
+describe('inventory, pickers, multi-select, list', () => {
+  test('inventory sheet: grouped, suffixes, live update, tap -> actionsFor item -> act', async () => {
+    const m = mk();
+    ui = m.ui;
+    m.ui.api.addMessages('en', msgs);
+    const asked: unknown[] = [];
+    m.game.query.actionsFor = (t) => {
+      asked.push(t);
+      return Promise.resolve([
+        {
+          action: { type: 'mod', action: 'nh:drop', params: { item: 1 } } as PlayerAction,
+          labelKey: 'Drop',
+          source: 't',
+        },
+      ]);
+    };
+    m.ui.update(
+      invView([item(2, 'b', 'food', 'ration'), item(1, 'a', 'weapon', 'dagger', true)]),
+      [],
+      null,
+    );
+    (m.root.querySelector('.nh-inventory-btn') as HTMLElement).click();
+    expect(m.root.querySelector('.nh-sheet-title')?.textContent).toBe('Inventory');
+    expect([...m.root.querySelectorAll('.nh-sheet-heading')].map((e) => e.textContent)).toEqual([
+      'Weapons',
+      'Comestibles',
+    ]);
+    expect(btns(m.root).map((b) => b.textContent)).toEqual([
+      ') a - a dagger (weapon in hand)',
+      'b - a food ration',
+      'Close',
+    ]);
+    m.ui.update(
+      { ...(invView([item(1, 'a', 'weapon', 'dagger')]) as object), kind: 'delta' } as ViewUpdate,
+      [],
+      null,
+    );
+    expect(btns(m.root).map((b) => b.textContent)).toEqual([') a - a dagger', 'Close']);
+    btns(m.root)[0]!.click();
+    await flush();
+    expect(asked).toEqual([{ kind: 'item', id: 1 }]);
+    btns(m.root)[0]!.click();
+    expect(m.acts).toEqual([{ type: 'mod', action: 'nh:drop', params: { item: 1 } }]);
+    expect(btns(m.root)).toHaveLength(0);
+  });
+
+  test('empty inventory and escape; keyboard binding via ui command', () => {
+    const mod: ClientMod = {
+      id: 'k',
+      version: '1',
+      register: (api) => api.bindKey('i', { type: 'ui', id: 'inventory' }),
+    };
+    const m = mk({ mods: [defaultKeymap, mod] });
+    ui = m.ui;
+    m.ui.update(invView([]), [], null);
+    key('i');
+    expect(m.root.querySelector('.nh-sheet-text')?.textContent).toBe('Not carrying anything.');
+    key('Escape');
+    expect(btns(m.root)).toHaveLength(0);
+  });
+
+  test('pick:<action> filters items by offer; none logs a message; self:<action>', async () => {
+    const mod: ClientMod = {
+      id: 'k',
+      version: '1',
+      register: (api) => {
+        api.bindKey('d', { type: 'ui', id: 'pick:nh:drop' });
+        api.bindKey(',', { type: 'ui', id: 'self:nh:pickup' });
+      },
+    };
+    const m = mk({ mods: [defaultKeymap, mod] });
+    ui = m.ui;
+    m.ui.api.addMessages('en', msgs);
+    const drop = (id: number): ActionOffer => ({
+      action: { type: 'mod', action: 'nh:drop', params: { item: id } } as PlayerAction,
+      labelKey: 'D',
+      source: 't',
+    });
+    m.game.query.actionsFor = (t) =>
+      Promise.resolve(
+        t.kind === 'self'
+          ? [
+              {
+                action: { type: 'mod', action: 'nh:pickup' } as PlayerAction,
+                labelKey: 'P',
+                source: 't',
+              },
+            ]
+          : 'id' in t && t.id === 2
+            ? [drop(2)]
+            : [
+                {
+                  action: { type: 'mod', action: 'nh:wield' } as PlayerAction,
+                  labelKey: 'W',
+                  source: 't',
+                },
+              ],
+      );
+    m.ui.update(
+      invView([item(1, 'a', 'weapon', 'dagger'), item(2, 'b', 'food', 'ration')]),
+      [],
+      null,
+    );
+    key('d');
+    await flush();
+    expect(m.root.querySelector('.nh-sheet-title')?.textContent).toBe('What do you want to drop?');
+    expect(btns(m.root).map((b) => b.textContent)).toEqual(['b - a food ration', 'Cancel']);
+    btns(m.root)[0]!.click();
+    expect(m.acts).toEqual([{ type: 'mod', action: 'nh:drop', params: { item: 2 } }]);
+    m.ui.update(invView([item(1, 'a', 'weapon', 'dagger')]), [], null);
+    key('d');
+    await flush();
+    expect(btns(m.root)).toHaveLength(0);
+    expect(logText(m.root).at(-1)).toBe("You don't have anything to drop.");
+    key(',');
+    await flush();
+    expect(m.acts.at(-1)).toEqual({ type: 'mod', action: 'nh:pickup' });
+  });
+
+  const multi: Prompt = {
+    id: 'p1',
+    kind: 'menu',
+    key: 'prompt.pickup',
+    multi: true,
+    options: [
+      { value: 11, key: 'obj.dagger', glyph: 'nh:dagger' },
+      { value: 12, key: 'obj.ration' },
+      { value: 13, key: 'obj.mail' },
+    ],
+  };
+  const rows = (root: Element) => [...root.querySelectorAll('.nh-check')] as HTMLElement[];
+
+  test('multi prompt: toggles, confirm answers array; cancel answers []', () => {
+    const m = mk();
+    ui = m.ui;
+    m.ui.api.addMessages('en', { ...msgs, 'prompt.pickup': 'Pick up what?' });
+    m.ui.update(invView([]), [], multi);
+    expect(rows(m.root)).toHaveLength(3);
+    expect(rows(m.root)[0]!.querySelector('.nh-glyph')?.textContent).toBe(')');
+    rows(m.root)[0]!.click();
+    rows(m.root)[2]!.click();
+    expect(rows(m.root).map((r) => r.getAttribute('aria-checked'))).toEqual([
+      'true',
+      'false',
+      'true',
+    ]);
+    (m.root.querySelector('.nh-confirm') as HTMLElement).click();
+    expect(m.acts).toEqual([{ type: 'answer', promptId: 'p1', value: [11, 13] }]);
+    m.ui.update(invView([]), [], null);
+    m.ui.update(invView([]), [], { ...multi, id: 'p2' });
+    (m.root.querySelector('.nh-sheet .nh-cancel') as HTMLElement).click();
+    expect(m.acts.at(-1)).toEqual({ type: 'answer', promptId: 'p2', value: [] });
+  });
+
+  test('multi prompt keyboard: letters and space toggle, enter confirms, escape cancels', () => {
+    const m = mk();
+    ui = m.ui;
+    m.ui.api.addMessages('en', { ...msgs, 'prompt.pickup': 'Pick up what?' });
+    m.ui.update(invView([]), [], multi);
+    key('b');
+    key('ArrowUp');
+    key(' ');
+    key('Enter');
+    expect(m.acts).toEqual([{ type: 'answer', promptId: 'p1', value: [11, 12] }]);
+    m.ui.update(invView([]), [], { ...multi, id: 'p3' });
+    key('Escape');
+    expect(m.acts.at(-1)).toEqual({ type: 'answer', promptId: 'p3', value: [] });
+  });
+
+  test('list event shows a closable sheet', () => {
+    const m = mk();
+    ui = m.ui;
+    m.ui.api.addMessages('en', { 'disc.title': 'Discoveries', ...msgs });
+    m.ui.update(
+      invView([]),
+      [
+        {
+          type: 'list',
+          titleKey: 'disc.title',
+          items: [{ key: 'obj.dagger' }, { key: 'obj.mail' }],
+        },
+      ],
+      null,
+    );
+    expect(m.root.querySelector('.nh-sheet-title')?.textContent).toBe('Discoveries');
+    expect([...m.root.querySelectorAll('.nh-sheet-text')].map((e) => e.textContent)).toEqual([
+      'a dagger',
+      'a mail',
+    ]);
+    btns(m.root)[0]!.click();
+    expect(btns(m.root)).toHaveLength(0);
+  });
+
+  test('look text includes the top object and a count of the rest', async () => {
+    const m = mk();
+    ui = m.ui;
+    m.ui.api.addMessages('en', { ...msgs, 'nh:floor': 'floor' });
+    m.ui.update(view(), [], null);
+    m.renderer.cell = { x: 6, y: 5 };
+    m.state.desc = {
+      terrain: 'nh:floor',
+      remembered: true,
+      visible: true,
+      entities: [],
+      objects: [
+        { id: 1, def: 'nh:dagger', name: { key: 'obj.dagger' } },
+        { id: 2, def: 'nh:ration', name: { key: 'obj.ration' } },
+        { id: 3, def: 'nh:mail', name: { key: 'obj.mail' } },
+      ],
+    };
+    (m.root.querySelector('.nh-look-btn') as HTMLElement).click();
+    tap(m.root.querySelector('.nh-map')!);
+    await flush();
+    expect(logText(m.root).at(-1)).toBe('You see: floor, a dagger, and 2 more objects.');
   });
 });

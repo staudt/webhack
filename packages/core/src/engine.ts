@@ -1,5 +1,6 @@
 import { generateLevel, VANILLA_TERRAIN, type LevelTerrain } from './levelgen/index';
 import { cellRules } from './movement';
+import { topObjects } from './objects';
 import { createQuery } from './query';
 import { loadMods, requireTerrains } from './registry';
 import { createRng, newRngStates } from './rng';
@@ -179,6 +180,14 @@ export function createEngine(mods: readonly Mod[], opts: EngineOptions = {}): En
     const visible = computeVisible(level, cellRules(level, registry), playerPos(state));
     const memory = (state.memory[level.id] ??= newMemory(level));
     updateMemory(memory, level, visible);
+    // ref: src/display.c map_object(): seen cells remember their top object (or its absence)
+    const objMemory = (state.objectMemory[level.id] ??= {});
+    const top = topObjects(registry, state, level);
+    for (const i of visible) {
+      const o = top.get(i);
+      if (o === undefined) delete objMemory[String(i)];
+      else objMemory[String(i)] = o;
+    }
     state.visible = visible;
   };
 
@@ -214,7 +223,7 @@ export function createEngine(mods: readonly Mod[], opts: EngineOptions = {}): En
       if (!roleDef) throw new Error('No player role registered');
       const s = seed >>> 0;
       const state: GameState = {
-        version: 2,
+        version: 3,
         seed: s,
         turn: 1,
         nextEntityId: 1,
@@ -226,6 +235,9 @@ export function createEngine(mods: readonly Mod[], opts: EngineOptions = {}): En
         currentLevel: levelId(1),
         playerId: 0,
         memory: {},
+        objectMemory: {},
+        appearances: {},
+        discovered: [],
         visible: [],
         timers: [],
         modData: {},

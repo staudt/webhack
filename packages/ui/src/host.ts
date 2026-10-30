@@ -4,6 +4,7 @@ import type {
   ClientMod,
   Description,
   GameEvent,
+  Glyph,
   MenuItem,
   Params,
   PlayerAction,
@@ -13,6 +14,7 @@ import type {
   Target,
   AsyncCoreQuery,
   UiCommand,
+  ViewItem,
   ViewUpdate,
 } from '@nh/core';
 import { ARROW_CODES, DEFAULT_CHORD_MS, createChord } from './chord';
@@ -20,7 +22,8 @@ import { attachKeyUp, attachKeys, attachTap } from './input';
 import { DEFAULT_LOCALE, mergeMessages, translate, uiMessagesEn, type Catalogs } from './i18n';
 import { buildLayout } from './layout';
 import { Keymap } from './keymap';
-import { openMenu, type MenuEntry, type OpenMenu } from './menu';
+import { classKey, equippedKey, groupInventory } from './inventory';
+import { openChecklist, openMenu, type MenuEntry, type OpenMenu } from './menu';
 import { createMessageLog } from './messageLog';
 import { injectStyles } from './styles';
 import { an, ripArt, statusLines } from './status';
@@ -57,6 +60,11 @@ export function createUi(opts: UiOptions): Ui {
   const keymap = new Keymap();
   const eventHandlers: ((e: GameEvent) => void)[] = [];
   const menuItems: MenuItem[] = [];
+  const glyphOverrides = new Map<string, Glyph>();
+  let legend: Record<string, Glyph> = {};
+  let inventory: ViewItem[] = [];
+  let invOpen = false;
+  const glyphOf = (id: string): Glyph | undefined => glyphOverrides.get(id) ?? legend[id];
   const t = (key: string, params?: Params): string => translate(catalogs, locale, key, params);
 
   const style = injectStyles(doc);
@@ -67,6 +75,7 @@ export function createUi(opts: UiOptions): Ui {
     layout.menuBtn.setAttribute('aria-label', t('ui.menu'));
     layout.actionsBtn.textContent = t('ui.actions');
     layout.lookBtn.textContent = t('ui.look.mode');
+    layout.inventoryBtn.textContent = t('ui.inventory');
     log.setHistoryTitle(t('ui.history'));
   };
 
@@ -76,7 +85,10 @@ export function createUi(opts: UiOptions): Ui {
       mergeMessages(catalogs, loc, cat);
       refreshText();
     },
-    setGlyph: (id, glyph) => renderer.setGlyph(id, glyph),
+    setGlyph: (id, glyph) => {
+      glyphOverrides.set(id, glyph);
+      renderer.setGlyph(id, glyph);
+    },
     onEvent: (fn) => {
       eventHandlers.push(fn);
     },
@@ -102,28 +114,44 @@ export function createUi(opts: UiOptions): Ui {
     const m = modal;
     modal = null;
     promptId = null;
+    invOpen = false;
     m?.close();
   };
-  const showModal = (title: string, entries: MenuEntry[], dismissable: boolean): OpenMenu => {
+  const showSheet = (make: (onClose: () => void) => OpenMenu): OpenMenu => {
     closeModal();
     chordReset();
-    const m = openMenu(root, {
-      title,
-      entries,
-      ...(dismissable ? { cancelLabel: t('ui.cancel') } : {}),
-      onClose: () => {
-        if (modal === m) modal = null;
-      },
+    const m: OpenMenu = make(() => {
+      if (modal === m) {
+        modal = null;
+        invOpen = false;
+      }
     });
     modal = m;
     return m;
   };
+  const showModal = (
+    title: string,
+    entries: MenuEntry[],
+    dismissable: boolean | string,
+    sel?: number,
+  ): OpenMenu =>
+    showSheet((onClose) =>
+      openMenu(root, {
+        title,
+        entries,
+        ...(dismissable
+          ? { cancelLabel: typeof dismissable === 'string' ? dismissable : t('ui.cancel') }
+          : {}),
+        ...(sel !== undefined ? { sel } : {}),
+        onClose,
+      }),
+    );
 
   const offerEntries = (offers: ActionOffer[]): MenuEntry[] =>
     offers.map((o) => ({ label: t(o.labelKey, o.params), run: () => game.act(o.action) }));
 
   const renderStatus = (s: ViewUpdate['status']): void => {
-    const lines = statusLines(s).map((fields) => {
+    const lines = statusLines(s, t).map((fields) => {
       const div = doc.createElement('div');
       div.className = 'nh-status-line';
       for (const f of fields) {
@@ -188,6 +216,76 @@ export function createUi(opts: UiOptions): Ui {
     });
   };
 
+  const itemLabel = (it: ViewItem): string => {
+    const name = t(it.name.key, it.name.params);
+    if (it.letter === null) return name;
+    const eq = equippedKey(it);
+    return eq
+      ? t('ui.item.equipped', { letter: it.letter, name, how: t(eq) })
+      : t('ui.item', { letter: it.letter, name });
+  };
+  const itemEntry = (it: ViewItem, run: () => void): MenuEntry => {
+    const glyph = glyphOf(it.g);
+    return { label: itemLabel(it), run, ...(glyph ? { glyph } : {}) };
+  };
+
+  const openItemActions = (it: ViewItem): void => {
+    void game.query.actionsFor({ kind: 'item', id: it.id }).then((offers) => {
+      if (destroyed) return;
+      showModal(itemLabel(it), offerEntries(offers), true);
+    });
+  };
+
+  const inventoryEntries = (): MenuEntry[] => {
+    if (inventory.length === 0)
+      return [{ label: t('ui.inventory.empty'), run: () => {}, text: true }];
+    const out: MenuEntry[] = [];
+    for (const grp of groupInventory(inventory)) {
+      out.push({ label: t(classKey(grp.cls)), run: () => {}, heading: true });
+      for (const it of grp.items) out.push(itemEntry(it, () => openItemActions(it)));
+    }
+    return out;
+  };
+  const showInventory = (sel?: number): void => {
+    showSheet((onClose) =>
+      openMenu(root, {
+        title: t('ui.inventory'),
+        entries: inventoryEntries(),
+        cancelLabel: t('ui.close'),
+        ...(sel !== undefined ? { sel } : {}),
+        onClose,
+      }),
+    );
+    invOpen = true;
+  };
+  const openInventory = (): void => showInventory();
+
+  /** Ask which inventory items offer `actionId` and let the player choose one. */
+  const pickItem = (actionId: string): void => {
+    const items = inventory;
+    void Promise.all(items.map((it) => game.query.actionsFor({ kind: 'item', id: it.id }))).then(
+      (all) => {
+        if (destroyed) return;
+        const entries: MenuEntry[] = [];
+        items.forEach((it, i) => {
+          const o = all[i]?.find((x) => x.action.type === 'mod' && x.action.action === actionId);
+          if (o) entries.push(itemEntry(it, () => game.act(o.action)));
+        });
+        if (entries.length === 0) log.push(t(`ui.pick.none.${actionId}`));
+        else showModal(t(`ui.pick.${actionId}`), entries, true);
+      },
+    );
+  };
+
+  /** Perform the self offer carrying mod action `actionId`, if there is one. */
+  const selfAction = (actionId: string): void => {
+    void game.query.actionsFor({ kind: 'self' }).then((offers) => {
+      if (destroyed) return;
+      const o = offers.find((x) => x.action.type === 'mod' && x.action.action === actionId);
+      if (o) game.act(o.action);
+    });
+  };
+
   const openMainMenu = (): void => {
     showModal(
       t('ui.menu'),
@@ -199,6 +297,13 @@ export function createUi(opts: UiOptions): Ui {
   const describeLine = (d: Description): string => {
     const names = d.entities.map((e) => t(e.def));
     if (d.terrain !== null) names.push(t(d.terrain));
+    const [top] = d.objects;
+    if (top) {
+      names.push(t(top.name.key, top.name.params));
+      const more = d.objects.length - 1;
+      if (more === 1) names.push(t('ui.look.more1'));
+      else if (more > 1) names.push(t('ui.look.more', { n: more }));
+    }
     if (names.length === 0) return t('describe.unexplored');
     let what = names.join(', ');
     if (d.remembered && !d.visible) what = t('ui.look.remembered', { what });
@@ -250,8 +355,13 @@ export function createUi(opts: UiOptions): Ui {
       case 'look':
         setLook(!lookMode);
         break;
+      case 'inventory':
+        openInventory();
+        break;
       default:
-        menuItems.find((m) => m.id === cmd.id)?.run();
+        if (cmd.id.startsWith('pick:')) pickItem(cmd.id.slice(5));
+        else if (cmd.id.startsWith('self:')) selfAction(cmd.id.slice(5));
+        else menuItems.find((m) => m.id === cmd.id)?.run();
     }
   };
 
@@ -284,6 +394,10 @@ export function createUi(opts: UiOptions): Ui {
   const onLookBtn = (): void => {
     if (!modal) setLook(!lookMode);
   };
+  const onInventoryBtn = (): void => {
+    if (!modal) openInventory();
+  };
+  layout.inventoryBtn.addEventListener('click', onInventoryBtn);
   layout.menuBtn.addEventListener('click', onMenuBtn);
   layout.actionsBtn.addEventListener('click', onActionsBtn);
   layout.lookBtn.addEventListener('click', onLookBtn);
@@ -293,13 +407,35 @@ export function createUi(opts: UiOptions): Ui {
       (value: unknown): MenuEntry['run'] =>
       () =>
         game.act({ type: 'answer', promptId: p.id, value: value as never });
+    if (p.kind === 'menu' && p.multi) {
+      const opts = p.options ?? [];
+      showSheet((onClose) =>
+        openChecklist(root, {
+          title: t(p.key, p.params),
+          options: opts.map((o) => {
+            const glyph = o.glyph ? glyphOf(o.glyph) : undefined;
+            return { label: t(o.key, o.params), ...(glyph ? { glyph } : {}) };
+          }),
+          confirmLabel: t('ui.confirm'),
+          cancelLabel: t('ui.cancel'),
+          onConfirm: (idx) => answer(idx.flatMap((i) => (opts[i] ? [opts[i].value] : [])))(),
+          onCancel: () => answer([])(),
+          onClose,
+        }),
+      );
+      promptId = p.id;
+      return;
+    }
     const entries: MenuEntry[] =
       p.kind === 'yn' && !p.options
         ? [
             { label: t('ui.yes'), run: answer(true) },
             { label: t('ui.no'), run: answer(false) },
           ]
-        : (p.options ?? []).map((o) => ({ label: t(o.key), run: answer(o.value) }));
+        : (p.options ?? []).map((o) => {
+            const glyph = o.glyph ? glyphOf(o.glyph) : undefined;
+            return { label: t(o.key, o.params), run: answer(o.value), ...(glyph ? { glyph } : {}) };
+          });
     showModal(t(p.key, p.params), entries, false);
     promptId = p.id;
   };
@@ -309,10 +445,14 @@ export function createUi(opts: UiOptions): Ui {
     update(view, events, prompt) {
       if (destroyed) return;
       renderer.apply(view);
+      if (view.kind === 'full') legend = view.legend;
+      inventory = view.inventory;
       renderStatus(view.status);
       playerPos = { x: view.player.x, y: view.player.y };
+      let listEv: Extract<GameEvent, { type: 'list' }> | null = null;
       for (const ev of events) {
         if (ev.type === 'msg') log.push(t(ev.key, ev.params));
+        else if (ev.type === 'list') listEv = ev;
         for (const fn of eventHandlers) fn(ev);
       }
       if (view.status['dead'] !== undefined) {
@@ -328,6 +468,22 @@ export function createUi(opts: UiOptions): Ui {
       } else if (promptId !== null) {
         closeModal();
       }
+      if (listEv && !prompt) {
+        const ev = listEv;
+        showModal(
+          t(ev.titleKey),
+          [
+            ...ev.items.map((m) => ({
+              label: t(m.key, m.params),
+              run: () => {},
+              text: true,
+            })),
+          ],
+          t('ui.close'),
+        );
+      } else if (invOpen && modal) {
+        showInventory(modal.getSel());
+      }
     },
     notify(key, params) {
       if (!destroyed) log.push(t(key, params));
@@ -341,6 +497,7 @@ export function createUi(opts: UiOptions): Ui {
       win?.removeEventListener('blur', chord.reset);
       chord.reset();
       detachTap();
+      layout.inventoryBtn.removeEventListener('click', onInventoryBtn);
       layout.menuBtn.removeEventListener('click', onMenuBtn);
       layout.actionsBtn.removeEventListener('click', onActionsBtn);
       layout.lookBtn.removeEventListener('click', onLookBtn);

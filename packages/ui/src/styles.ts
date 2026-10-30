@@ -27,6 +27,12 @@ padding-top:env(safe-area-inset-top);padding-left:env(safe-area-inset-left);padd
 .nh-sheet{width:100%;max-width:480px;max-height:80dvh;overflow-y:auto;display:flex;flex-direction:column;gap:8px;padding:12px;background:var(--nh-panel);border-radius:12px 12px 0 0}
 .nh-sheet-title{font-weight:bold;padding:4px}
 .nh-sheet-btn{text-align:left}
+.nh-sheet-heading{font-weight:bold;color:var(--nh-accent);padding:4px 4px 0}
+.nh-sheet-text{padding:2px 4px;color:var(--nh-fg)}
+.nh-glyph{display:inline-block;min-width:1ch;font-family:ui-monospace,Menlo,Consolas,monospace;font-weight:bold;background:#000;border-radius:3px;text-align:center}
+.nh-checkbox::before{content:"[ ]";font-family:ui-monospace,Menlo,Consolas,monospace}
+.nh-checked .nh-checkbox::before{content:"[x]"}
+@media (max-width:400px){.nh-bar{gap:6px;padding:8px 6px}.nh-bar .nh-btn{padding:8px 6px;font-size:15px}}
 `;
 
 export function injectStyles(doc: Document): HTMLStyleElement {

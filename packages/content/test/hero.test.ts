@@ -166,6 +166,8 @@ const def = (o: Partial<MonsterDef>): MonsterDef => ({
   group: null,
   genFlags: [],
   difficulty: 1,
+  weight: 100,
+  nutrition: 100,
   brain: 'nh:x',
   ...o,
 });

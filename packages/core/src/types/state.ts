@@ -29,7 +29,7 @@ export interface PendingPrompt {
 
 /** The whole game. JSON-plain: no classes, Map, Set, functions or typed arrays. */
 export interface GameState {
-  version: 2;
+  version: 3;
   seed: number;
   turn: number;
   nextEntityId: number;
@@ -45,6 +45,12 @@ export interface GameState {
   playerId: EntityId;
   /** Remembered palette index per cell; -1 = never seen. */
   memory: Record<LevelId, number[]>;
+  /** Remembered top object per cell, as a shown id; keyed by cell index. */
+  objectMemory: Record<LevelId, Record<string, DefId>>;
+  /** Object def -> appearance def for randomized descriptions (ref: src/o_init.c shuffle_all). */
+  appearances: Record<DefId, DefId>;
+  /** Object defs whose identity the hero knows, sorted (ref: src/o_init.c discover_object). */
+  discovered: DefId[];
   /** Sorted cell indices currently visible to the player. */
   visible: number[];
   /** Sorted by (at, seq). */

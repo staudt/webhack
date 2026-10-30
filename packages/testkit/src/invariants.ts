@@ -79,10 +79,37 @@ export function checkInvariants(state: GameState, registry: Registry): string[] 
     if (pal === undefined || !registry.hasTerrain(pal) || !registry.terrain(pal).passable) {
       errs.push(`entity ${id}: on impassable cell (${pal ?? '?'}) at ${p.x},${p.y}`);
     }
+    // Objects pile up; only creatures need a cell to themselves.
+    if (e.c.item) continue;
     const key = `${p.level}:${p.x},${p.y}`;
     const other = seen.get(key);
     if (other !== undefined) errs.push(`entities ${other} and ${id} share cell ${key}`);
     else seen.set(key, id);
+  }
+
+  // Items: exactly one place, a living carrier, unique inventory letters per carrier.
+  const letters = new Map<string, number>();
+  for (const id of sortedIds(state)) {
+    const e = state.entities[String(id)];
+    const item = e?.c.item;
+    if (!e || !item) continue;
+    if (!registry.isObject(e.def)) errs.push(`item ${id}: def '${e.def}' is not a registered object`);
+    if (!Number.isInteger(item.quantity) || item.quantity < 1)
+      errs.push(`item ${id}: quantity ${item.quantity} is not a positive integer`);
+    if ((e.c.pos !== undefined) === (item.carriedBy !== null))
+      errs.push(`item ${id}: must be either on the floor or carried, not both or neither`);
+    if (item.carriedBy !== null) {
+      if (!state.entities[String(item.carriedBy)])
+        errs.push(`item ${id}: carried by missing entity ${item.carriedBy}`);
+      if (item.letter !== null) {
+        const k = `${item.carriedBy}:${item.letter}`;
+        const other = letters.get(k);
+        if (other !== undefined) errs.push(`items ${other} and ${id} share letter ${k}`);
+        else letters.set(k, id);
+      }
+    } else if (item.equipped !== null || item.letter !== null) {
+      errs.push(`item ${id}: on the floor but equipped or lettered`);
+    }
   }
 
   const player = state.entities[String(state.playerId)];

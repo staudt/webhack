@@ -10,7 +10,13 @@ export interface Pos {
 
 export type Json = null | boolean | number | string | Json[] | { [k: string]: Json };
 
-export type Params = Record<string, string | number>;
+/** A message: a catalog key plus params. Params may nest messages (item names inside sentences). */
+export interface Msg {
+  key: string;
+  params?: Params;
+}
+
+export type Params = { [k: string]: string | number | Msg };
 
 /** sfc32 state: four uint32 words. */
 export type RngState = [number, number, number, number];

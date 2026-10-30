@@ -68,9 +68,11 @@ function endTurn(ctx: Ctx): void {
     const brain = defs.brain(defs.monster(e.def).brain);
     a.energy += brain.movement ? brain.movement(ctx, id) : a.speed;
   }
-  // ref: src/allmain.c moveloop_core() u.umovement += moveamt
-  const hero = getPlayer(state).c.actor;
-  if (hero) hero.energy += hero.speed;
+  // ref: src/allmain.c moveloop_core() u.umovement += moveamt (u_calc_moveamt)
+  const hero = getPlayer(state);
+  const role = hero.c.player ? defs.role(hero.c.player.role) : null;
+  if (hero.c.actor)
+    hero.c.actor.energy += role?.movement ? role.movement(ctx, hero.id) : hero.c.actor.speed;
   state.turn += 1;
   // Due timers fire in (at, seq) order; timers they schedule run on later turns.
   while (state.timers.length > 0 && (state.timers[0]?.at ?? Infinity) <= state.turn) {

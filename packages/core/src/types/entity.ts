@@ -62,7 +62,62 @@ export interface MonsterComponent {
   lastHero: Pos | null;
 }
 
-/** All components are plain data. Reserved for milestone 3: inventory, item. */
+/** ref: include/objclass.h enum obj_armor_types */
+export type ArmorSlot = 'body' | 'cloak' | 'shirt' | 'helm' | 'gloves' | 'boots' | 'shield';
+
+export type EquipSlot = 'weapon' | ArmorSlot;
+
+export type Buc = 'blessed' | 'uncursed' | 'cursed';
+
+/**
+ * An object instance (ref: include/obj.h struct obj). An item is in exactly one place: on the
+ * floor (`pos` set, `carriedBy` null) or carried (`carriedBy` set, no `pos`).
+ */
+export interface ItemComponent {
+  quantity: number;
+  buc: Buc;
+  /** Enchantment or charges (obj->spe). */
+  spe: number;
+  /** What the hero knows about this instance (obj->bknown, obj->known). */
+  known: { buc: boolean; spe: boolean };
+  carriedBy: EntityId | null;
+  /** Inventory letter; hero's items only. */
+  letter: string | null;
+  equipped: EquipSlot | null;
+  /** Placement sequence (from `state.seq`); the highest on a cell is the top of the pile. */
+  placed: number;
+  /** Corpses: the monster it was (obj->corpsenm). */
+  corpseOf?: DefId;
+  /** Turn the object was created (obj->age), for rotting. */
+  age?: number;
+  /** Nutrition left in partly eaten food (obj->oeaten). */
+  eaten?: number;
+}
+
+/** ref: src/eat.c hunger states (u.uhs) */
+export type HungerState =
+  | 'satiated'
+  | 'not_hungry'
+  | 'hungry'
+  | 'weak'
+  | 'fainting'
+  | 'fainted'
+  | 'starved';
+
+export interface HungerComponent {
+  /** u.uhunger */
+  nutrition: number;
+  state: HungerState;
+}
+
+/** The entity cannot act until `until` (ref: src/hack.c nomul() with negative multi). */
+export interface HelplessComponent {
+  until: number;
+  /** Message key describing why (multi_reason). */
+  reasonKey: string;
+}
+
+/** All components are plain data. */
 export interface Components {
   pos?: PosComponent;
   actor?: ActorComponent;
@@ -72,6 +127,9 @@ export interface Components {
   experience?: ExperienceComponent;
   gear?: GearComponent;
   monster?: MonsterComponent;
+  item?: ItemComponent;
+  hunger?: HungerComponent;
+  helpless?: HelplessComponent;
 }
 
 export interface Entity {

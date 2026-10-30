@@ -1,8 +1,12 @@
-import type { DefId, EntityId, Params, Pos } from './common';
+import type { DefId, EntityId, Msg, Params, Pos } from './common';
 import type { PlayerAction } from './action';
 
 export type Target =
-  { kind: 'self' } | { kind: 'cell'; pos: Pos } | { kind: 'entity'; id: EntityId };
+  | { kind: 'self' }
+  | { kind: 'cell'; pos: Pos }
+  | { kind: 'entity'; id: EntityId }
+  /** An object in the hero's inventory; offers for any other item are empty. */
+  | { kind: 'item'; id: EntityId };
 
 export interface ActionOffer {
   action: PlayerAction;
@@ -16,7 +20,10 @@ export interface Description {
   terrain: DefId | null;
   remembered: boolean;
   visible: boolean;
+  /** Creatures on the cell (visible cells only). */
   entities: { id: EntityId; def: DefId }[];
+  /** Objects on the cell, top of the pile first, as shown ids (appearances); visible cells only. */
+  objects: { id: EntityId; def: DefId; name: Msg }[];
 }
 
 /** Read-only queries, answered from player knowledge only. */
