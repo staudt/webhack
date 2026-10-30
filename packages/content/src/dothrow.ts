@@ -20,7 +20,7 @@ import {
   type PromptOption,
 } from '@nh/core';
 import { dbon, dmgval, hitval, monsterIdAt } from './combat';
-import { xkilledCorpse } from './corpses';
+import { monsterDied } from './mondeath';
 import { experienceFor, gainExperience } from './hero';
 import { encumberMsg } from './itemactions';
 import { placeOnFloor, removeFromInventory, splitStack, weight } from './items';
@@ -167,9 +167,7 @@ function thitmonst(ctx: Ctx, monId: EntityId, objId: EntityId, shot: Shot): bool
   if (!hp || hp.cur < 1) {
     // ref: src/mon.c xkilled(): "You kill/destroy <mon>!" then experience()
     msg(ctx, nonliving(mdef) ? 'combat.you_destroy' : 'combat.you_kill', { mon: name });
-    const at = mon.c.pos;
-    ctx.remove(monId);
-    xkilledCorpse(ctx, mdef, at);
+    monsterDied(ctx, monId, true);
     gainExperience(ctx, hero.id, experienceFor(mdef, m.level));
     return false;
   }

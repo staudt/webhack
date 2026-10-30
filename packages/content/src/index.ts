@@ -16,6 +16,7 @@ import { ROLES } from './roles';
 import { TERRAIN } from './terrain';
 import { TRAVEL_ACTIONS } from './travel';
 import { registerGeneration } from './generation';
+import { registerMklev } from './mklev';
 import { POTION_ACTIONS, POTION_USES } from './potion';
 import { READ_ACTIONS, SCROLL_USES } from './read';
 import { THROW_ACTIONS } from './dothrow';
@@ -53,6 +54,7 @@ export const vanillaMod: Mod = {
     registerShuffle(api);
     registerHero(api);
     registerGeneration(api);
+    registerMklev(api);
   },
 };
 
@@ -143,4 +145,19 @@ export {
   hungerData,
 } from './hunger';
 export { EAT_ACTIONS, stopOccupation, losehp } from './eat';
+export { mkobj, mkobjAt, rndmonnum, MKOBJ_PROBS } from './mkobj';
+export { fillOrdinaryRoom, somexyspace } from './mklev';
+export { monsterDied } from './mondeath';
+export {
+  mongets,
+  mInitWeap,
+  mInitInv,
+  mDoWear,
+  selectHwep,
+  monWieldItem,
+  monWep,
+  minvent,
+  mpickstuff,
+  relobj,
+} from './mongear';
 export { xkilledCorpse, corpseChance, startCorpseTimeout, rnz, ROT_AGE } from './corpses';

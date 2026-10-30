@@ -93,7 +93,8 @@ export function checkInvariants(state: GameState, registry: Registry): string[] 
     const e = state.entities[String(id)];
     const item = e?.c.item;
     if (!e || !item) continue;
-    if (!registry.isObject(e.def)) errs.push(`item ${id}: def '${e.def}' is not a registered object`);
+    if (!registry.isObject(e.def))
+      errs.push(`item ${id}: def '${e.def}' is not a registered object`);
     if (!Number.isInteger(item.quantity) || item.quantity < 1)
       errs.push(`item ${id}: quantity ${item.quantity} is not a positive integer`);
     if ((e.c.pos !== undefined) === (item.carriedBy !== null))
@@ -113,6 +114,8 @@ export function checkInvariants(state: GameState, registry: Registry): string[] 
     }
   }
 
+  checkEquipment(state, registry, errs);
+
   const player = state.entities[String(state.playerId)];
   if (!player) errs.push(`player entity ${state.playerId} missing`);
   else {
@@ -121,6 +124,16 @@ export function checkInvariants(state: GameState, registry: Registry): string[] 
     else if (player.c.pos.level !== state.currentLevel) {
       errs.push(`player on '${player.c.pos.level}' but currentLevel is '${state.currentLevel}'`);
     }
+  }
+
+  if (player?.c.hunger && !Number.isInteger(player.c.hunger.nutrition))
+    errs.push(`hero nutrition ${player.c.hunger.nutrition} is not an integer`);
+  // content's nomul() sets until = turn + 1 + n and its endOfTurn hook deletes the component once
+  // turn >= until, so after a step a helpless hero must still have time left.
+  for (const id of sortedIds(state)) {
+    const h = state.entities[String(id)]?.c.helpless;
+    if (h && (!Number.isInteger(h.until) || (h.until <= state.turn && !state.gameOver)))
+      errs.push(`entity ${id}: helpless until ${h.until} but the turn is ${state.turn}`);
   }
 
   if (state.pendingPrompt && state.gameOver) errs.push('pendingPrompt and gameOver are both set');
@@ -160,4 +173,48 @@ export function checkInvariants(state: GameState, registry: Registry): string[] 
     if (stateHash(back) !== stateHash(state)) errs.push('JSON round-trip changes the state hash');
   }
   return errs;
+}
+
+const INVLET = /^[$a-zA-Z#]$/;
+
+/**
+ * Carriers and equipment: a carried item's carrier is the hero or a monster standing on a level,
+ * every equipped item is carried, a carrier has at most one wielded weapon and one piece of armor
+ * per slot (and the slot matches the item's def), and the hero's items have valid letters.
+ * Weight conservation is not checked: weights are derived from the items, never stored, so there
+ * is no redundant total to keep in sync.
+ */
+function checkEquipment(state: GameState, registry: Registry, errs: string[]): void {
+  const slots = new Map<string, number>();
+  for (const id of sortedIds(state)) {
+    const e = state.entities[String(id)];
+    const item = e?.c.item;
+    if (!e || !item || item.carriedBy === null) continue;
+    const carrier = state.entities[String(item.carriedBy)];
+    if (carrier && item.carriedBy !== state.playerId) {
+      const p = carrier.c.pos;
+      if (!p || !state.levels[p.level])
+        errs.push(`item ${id}: carrier ${item.carriedBy} is not on a level`);
+    }
+    if (item.carriedBy === state.playerId) {
+      if (item.letter === null || !INVLET.test(item.letter))
+        errs.push(
+          `item ${id}: hero inventory letter '${item.letter ?? 'null'}' is not in $a-zA-Z#`,
+        );
+    }
+    if (item.equipped === null) continue;
+    const k = `${item.carriedBy}:${item.equipped}`;
+    const other = slots.get(k);
+    if (other !== undefined) errs.push(`items ${other} and ${id} both occupy slot ${k}`);
+    else slots.set(k, id);
+    if (registry.isObject(e.def)) {
+      const def = registry.object(e.def);
+      // anything may be wielded, but only armor of the matching slot can be worn there
+      if (item.equipped !== 'weapon' && def.armor?.slot !== item.equipped) {
+        errs.push(
+          `item ${id}: '${e.def}' worn in slot ${item.equipped}, its slot is ${def.armor?.slot ?? 'none'}`,
+        );
+      }
+    }
+  }
 }

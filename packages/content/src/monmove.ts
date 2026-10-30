@@ -10,6 +10,7 @@ import {
   type CellRules,
   type Ctx,
   type EntityId,
+  type Entity,
   type Json,
   type Level,
   type MonsterDef,
@@ -18,6 +19,16 @@ import {
 } from '@nh/core';
 import { openDoorAt } from './actions';
 import { monsterAttack } from './combat';
+import {
+  canCarry,
+  mDoWear,
+  monFlag,
+  monWieldItem,
+  monWouldTakeItem,
+  mpickstuff,
+  setMonFlag,
+} from './mongear';
+import { acurrstr } from './stats';
 
 /** ref: include/hack.h BOLT_LIM */
 export const BOLT_LIM = 8;
@@ -175,7 +186,9 @@ export function mfndpos(
   const taken = new Set<number>();
   for (const [key, ent] of Object.entries(ctx.state.entities)) {
     const p = ent.c.pos;
-    if (p && p.level === level.id && Number(key) !== id) taken.add(cellIndex(level, p.x, p.y));
+    // objects do not block (only creatures: monsters and the hero)
+    if (p && p.level === level.id && Number(key) !== id && ent.c.item === undefined)
+      taken.add(cellIndex(level, p.x, p.y));
   }
   const rock = (x: number, y: number): boolean => {
     if (!inBounds(level, x, y)) return true;
@@ -233,24 +246,121 @@ function trackAdd(ctx: Ctx, id: EntityId, x: number, y: number): void {
   md['nh'] = root;
 }
 
-type MoveStatus = 'moved' | 'nothing';
+/** MMOVE_MOVED, MMOVE_NOTHING (may still attack) and MMOVE_DONE (picked something up) */
+type MoveStatus = 'moved' | 'nothing' | 'done';
+
+/** ref: include/hacklib.h distmin() */
+const distmin = (x0: number, y0: number, x1: number, y1: number): number =>
+  Math.max(Math.abs(x0 - x1), Math.abs(y0 - y1));
+
+/** ref: src/monmove.c SQSRCHRADIUS: max distmin() for a monster to look for items */
+const SQSRCHRADIUS = 5;
+
+/**
+ * Whether the monster is lined up with the hero within bolt range and sees her.
+ * ref: src/mthrowu.c lined_up() / linedup(): same row, column or diagonal, distmin < BOLT_LIM
+ */
+function linedUp(level: Level, opaque: readonly boolean[], mon: Pos, hero: Pos): boolean {
+  const tbx = hero.x - mon.x;
+  const tby = hero.y - mon.y;
+  if (tbx === 0 && tby === 0) return false;
+  if (
+    (tbx === 0 || tby === 0 || Math.abs(tbx) === Math.abs(tby)) &&
+    distmin(tbx, tby, 0, 0) < BOLT_LIM
+  )
+    return clearPath(level, opaque, hero.x, hero.y, mon.x, mon.y);
+  return false;
+}
+
+/**
+ * The monster looks for an item it wants within a few squares and makes it its goal.
+ * ref: src/monmove.c m_search_items(): closest first (a later one at equal distance wins),
+ * only items in view that it would take and can carry; rocks are never worth a trip. Not ported:
+ * shops, traps, scary squares, water, the immobile-monster-on-top check, mercenaries.
+ * Returns whether it is already standing on one (MMOVE_DONE).
+ */
+function mSearchItems(
+  ctx: Ctx,
+  id: EntityId,
+  level: Level,
+  opaque: readonly boolean[],
+  goal: Pos,
+  heroPos: Pos,
+): boolean {
+  const { m, pos } = monCount(ctx, id);
+  let minr = SQSRCHRADIUS;
+  if (distmin(heroPos.x, heroPos.y, pos.x, pos.y) < SQSRCHRADIUS && !m.peaceful) minr--;
+  // the objects of the level by cell, top of each pile first
+  const piles = new Map<number, Entity[]>();
+  for (const e of Object.values(ctx.state.entities)) {
+    const p = e.c.pos;
+    if (!p || p.level !== level.id || !e.c.item) continue;
+    const k = cellIndex(level, p.x, p.y);
+    const list = piles.get(k);
+    if (list) list.push(e);
+    else piles.set(k, [e]);
+  }
+  for (const list of piles.values())
+    list.sort((a, b) => (b.c.item?.placed ?? 0) - (a.c.item?.placed ?? 0) || a.id - b.id);
+  const hmx = Math.min(level.width - 1, pos.x + minr);
+  const hmy = Math.min(level.height - 1, pos.y + minr);
+  const lmx = Math.max(1, pos.x - minr);
+  const lmy = Math.max(0, pos.y - minr);
+  for (let xx = lmx; xx <= hmx; xx++) {
+    for (let yy = lmy; yy <= hmy; yy++) {
+      const pile = piles.get(cellIndex(level, xx, yy));
+      if (!pile) continue;
+      if (minr < distmin(pos.x, pos.y, xx, yy)) continue; // found an object closer already
+      if (!clearPath(level, opaque, pos.x, pos.y, xx, yy)) continue; // m_cansee()
+      for (const o of pile) {
+        // ref: 3.6 m_move() excluded corpses here; 5.0's mpickstuff() refuses them after the
+        // monster has walked to one, which would leave it stuck on the square
+        if (o.def === 'nh:rock' || o.def === 'nh:corpse') continue;
+        if (monWouldTakeItem(ctx, id, o) && canCarry(ctx, id, o) > 0) {
+          minr = distmin(pos.x, pos.y, xx, yy);
+          goal.x = xx;
+          goal.y = yy;
+          if (xx === pos.x && yy === pos.y) return true;
+          break; // skip the rest of the pile
+        }
+      }
+    }
+  }
+  return false;
+}
 
 /**
  * Chooses and performs one step. ref: src/monmove.c m_move() and postmov().
  * The goal is where the monster thinks the hero is (set_apparxy: the true position, since we
  * have no invisibility or displacement). appr is 1 (approach) for hostiles, 0 (wander) for
- * peacefuls and, one time in three, for bats. Not ported: fleeing, item pickup, ranged
+ * peacefuls and, one time in three, for bats. Monsters walk to and pick up items they want
+ * (m_search_items, mpickstuff). Not ported: fleeing, ranged
  * "balking", tracking the hero's trail, tunneling, special movers, traps.
  */
 function mMove(ctx: Ctx, id: EntityId, heroPos: Pos): MoveStatus {
   const { m, pos, def } = monCount(ctx, id);
   const level = getLevel(ctx.state, pos.level);
   const rules = cellRules(level, ctx.defs);
-  const ggx = heroPos.x;
-  const ggy = heroPos.y;
+  const goal: Pos = { x: heroPos.x, y: heroPos.y };
 
   let appr = 1;
   if (m.peaceful || (isBatClass(def) && ctx.rng.rn2(3) === 0)) appr = 0;
+
+  // ref: m_move(): hostile monsters (and peaceful ones 1 time in 10) look for items unless they
+  // are closing in on a hero they are lined up with ("monsters in combat won't pick stuff up")
+  if (!m.peaceful || ctx.rng.rn2(10) === 0) {
+    const str = acurrstr(getPlayer(ctx.state).c.attributes?.str ?? 10);
+    const inLine =
+      linedUp(level, rules.opaque, pos, heroPos) &&
+      distmin(pos.x, pos.y, heroPos.x, heroPos.y) <= Math.trunc(str / 2) + 1;
+    if ((appr !== 1 || !inLine) && mSearchItems(ctx, id, level, rules.opaque, goal, heroPos)) {
+      // standing on something wanted: postmov() -> mpickstuff()
+      mpickstuff(ctx, id);
+      return 'done';
+    }
+  }
+  const ggx = goal.x;
+  const ggy = goal.y;
 
   const cands = mfndpos(ctx, level, rules, id, heroPos);
   const cnt = cands.length;
@@ -299,6 +409,8 @@ function mMove(ctx: Ctx, id: EntityId, heroPos: Pos): MoveStatus {
         : { type: 'msg', key: 'door.hear_open' },
     );
   }
+  // ref: postmov(): a monster that moved picks up something it likes on the new square
+  if (mpickstuff(ctx, id)) return 'done';
   return 'moved';
 }
 
@@ -308,13 +420,22 @@ function mMove(ctx: Ctx, id: EntityId, heroPos: Pos): MoveStatus {
  * that is not next to the hero, is peaceful, or (wanderers, e.g. bats) rolls 1/4, moves via
  * m_move(); one that moved does not attack in the same action. Phase four: a hostile adjacent
  * monster attacks. Not ported: fleeing/scared, confusion, invisibility, spellcasting,
- * defensive/misc item use, weapon wielding, special per-monster behavior.
+ * defensive/misc item use, special per-monster behavior.
  */
 export function dochug(ctx: Ctx, id: EntityId): void {
   const { m, pos } = monCount(ctx, id);
   const hero = getPlayer(ctx.state);
   const hp = hero.c.pos;
   if (!hp || hp.level !== pos.level) return;
+
+  // ref: src/mon.c m_move_aggress()/movemon_singlemon(): after picking something up a monster
+  // reassesses its armor, when it thinks the hero is not near (or is peaceful); putting
+  // something on spends the turn. (No donning delay.)
+  if (monFlag(ctx, 'gearchk', id) && (m.peaceful || dist2(pos.x, pos.y, hp.x, hp.y) > 9)) {
+    setMonFlag(ctx, 'gearchk', id, false);
+    if (mDoWear(ctx, id, false)) return;
+  }
+
   if (m.asleep && !disturb(ctx, id)) return;
 
   // ref: set_apparxy(): the monster knows where the hero is
@@ -325,10 +446,24 @@ export function dochug(ctx: Ctx, id: EntityId): void {
   const inrange = dist2(pos.x, pos.y, heroPos.x, heroPos.y) <= BOLT_LIM * BOLT_LIM;
   const nearby = inrange && monnear(pos.x, pos.y, heroPos.x, heroPos.y);
 
+  // ref: dochug(): "If monster is nearby you, and has to wield a weapon, do so. This costs the
+  // monster a move, of course."
+  if (
+    !m.peaceful &&
+    inrange &&
+    dist2(pos.x, pos.y, heroPos.x, heroPos.y) <= 8 &&
+    def.attacks.some((a) => a.at === 'weapon') &&
+    monWieldItem(ctx, id)
+  )
+    return;
+
+  let status: MoveStatus = 'nothing';
   if (!nearby || (isWanderer(def) && ctx.rng.rn2(4) === 0) || m.peaceful) {
-    if (mMove(ctx, id, heroPos) === 'moved') return;
+    status = mMove(ctx, id, heroPos);
+    if (status === 'moved') return;
   }
-  if (!m.peaceful && inrange && monnear(pos.x, pos.y, heroPos.x, heroPos.y)) {
+  // MMOVE_DONE (picked something up) means no attack this move
+  if (status !== 'done' && !m.peaceful && inrange && monnear(pos.x, pos.y, heroPos.x, heroPos.y)) {
     monsterAttack(ctx, id);
   }
 }

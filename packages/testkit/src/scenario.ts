@@ -5,13 +5,20 @@ import {
   createEngine,
   getLevel,
   getPlayer,
+  buildSnapshot,
+  inventoryOf,
+  itemsAt,
   sortedIds,
   newMemory,
   updateMemory,
   type AttributesComponent,
   type CoreQuery,
+  type Buc,
   type DefId,
+  type EquipSlot,
   type Engine,
+  type HungerState,
+  type ItemComponent,
   type GameEvent,
   type GameOver,
   type GameState,
@@ -39,6 +46,35 @@ export const DEFAULT_LEGEND: AsciiLegend = {
   h: VANILLA_TERRAIN.door_open_h,
   '@': VANILLA_TERRAIN.floor,
 };
+
+/** Options for `s.item()`. Everything is exact: nothing is randomized. */
+export interface ItemOpts {
+  /** Default 1. */
+  quantity?: number;
+  /** Default 'uncursed'. */
+  buc?: Buc;
+  /** Enchantment or charges, default 0. */
+  spe?: number;
+  /** What the hero knows: true = BUC and enchantment, or choose each. Default: nothing. */
+  known?: boolean | { buc?: boolean; spe?: boolean };
+  /** Inventory only: wielded ('weapon') or worn in this armor slot. */
+  equipped?: EquipSlot;
+  /** Corpses: the monster def. */
+  corpseOf?: DefId;
+}
+
+/** One expected inventory stack. A bare def id matches by def alone. */
+export type ItemSpec =
+  | DefId
+  | {
+      def: DefId;
+      quantity?: number;
+      letter?: string;
+      /** A slot, or `null` for "not equipped". Omit to not care. */
+      equipped?: EquipSlot | null;
+      buc?: Buc;
+      spe?: number;
+    };
 
 export interface ScenarioBuilder {
   /** Replace dlvl1 with a hand-built level; '@' marks the player. */
@@ -85,6 +121,30 @@ export interface ScenarioBuilder {
   expectMonsterAt(pos: Pos, def?: DefId): void;
   expectNoMonsterAt(pos: Pos): void;
   expectGameOver(kind?: GameOver['kind']): void;
+
+  /**
+   * Create an object with exactly the given fields and put it on the floor at `pos` or into the
+   * hero's inventory (it gets the first free letter a-z then A-Z, gold is '$'). Items never merge
+   * here, so two calls make two stacks. The level cell must be passable.
+   */
+  item(def: DefId, where: Pos | 'inventory', opts?: ItemOpts): void;
+  /** Remove everything the hero carries (the starting kit included). */
+  clearInventory(): void;
+  /**
+   * The hero's inventory must be exactly these stacks, in any order (each spec matches a distinct
+   * stack). Pass `{ only: false }` to allow additional stacks. `[]` means empty.
+   */
+  expectInventory(spec: readonly ItemSpec[], opts?: { only?: boolean }): void;
+  /** The wielded item's def, or `null` for bare hands. */
+  expectWielded(def: DefId | null): void;
+  /** The hero's armor class as the status line shows it. */
+  expectAc(n: number): void;
+  /** The pile at `pos` contains an object of this def (and, with `quantity`, that stack size). */
+  expectItemAt(pos: Pos, def: DefId, quantity?: number): void;
+  expectNoItemAt(pos: Pos): void;
+  /** Set u.uhunger and the matching hunger state (silently: no messages, no strength change). */
+  setHunger(nutrition: number): void;
+  expectHunger(state: HungerState): void;
 }
 
 export interface ScenarioResult {
@@ -194,6 +254,23 @@ export function runScenario(
         `monsters: ${mons.length === 0 ? 'none' : mons.map((m) => `${m.def}#${m.id}@${m.pos.x},${m.pos.y} hp ${m.hp}`).join('; ')}\n` +
         `events: ${JSON.stringify(events)}\n${render(level, legend, playerAt(), mons)}`,
     );
+  };
+  const describeInventory = (): string =>
+    inventoryOf(state, state.playerId)
+      .map(
+        (e) =>
+          `${e.c.item?.letter ?? '?'}: ${e.def} x${e.c.item?.quantity ?? 0}` +
+          (e.c.item?.equipped ? ` (${e.c.item.equipped})` : ''),
+      )
+      .join('; ') || 'empty';
+  /** The first free letter a-z then A-Z among the hero's items. */
+  const freeLetter = (): string => {
+    const used = new Set(inventoryOf(state, state.playerId).map((e) => e.c.item?.letter));
+    for (let i = 0; i < 52; i++) {
+      const l = String.fromCharCode(i < 26 ? 97 + i : 65 + i - 26);
+      if (!used.has(l)) return l;
+    }
+    return fail('item(): the inventory is full (52 letters)');
   };
   const clearMonsters = (levelId?: string): void => {
     for (const id of sortedIds(state)) {
@@ -374,6 +451,130 @@ export function runScenario(
       if (!g) fail('expected the game to be over');
       else if (kind !== undefined && g.kind !== kind)
         fail(`expected game over '${kind}', found '${g.kind}'`);
+    },
+    item(def, where, o) {
+      if (!engine.registry.isObject(def)) fail(`item(): '${def}' is not a registered object`);
+      const id = state.nextEntityId++;
+      const k = o?.known;
+      const comp: ItemComponent = {
+        quantity: o?.quantity ?? 1,
+        buc: o?.buc ?? 'uncursed',
+        spe: o?.spe ?? 0,
+        known: {
+          buc: typeof k === 'object' ? (k.buc ?? false) : (k ?? false),
+          spe: typeof k === 'object' ? (k.spe ?? false) : (k ?? false),
+        },
+        carriedBy: null,
+        letter: null,
+        equipped: null,
+        placed: state.seq++,
+        age: Math.max(state.turn, 1),
+      };
+      if (o?.corpseOf !== undefined) comp.corpseOf = o.corpseOf;
+      if (def === 'nh:corpse' && comp.corpseOf === undefined)
+        fail('item(): a corpse needs the corpseOf option');
+      if (where === 'inventory') {
+        comp.carriedBy = state.playerId;
+        comp.letter = engine.registry.object(def).class === 'coin' ? '$' : freeLetter();
+        if (o?.equipped !== undefined) {
+          const taken = inventoryOf(state, state.playerId).find(
+            (e) => e.c.item?.equipped === o.equipped,
+          );
+          if (taken) fail(`item(): slot '${o.equipped}' is already occupied by ${taken.def}`);
+          comp.equipped = o.equipped;
+        }
+        state.entities[String(id)] = { id, def, c: { item: comp } };
+      } else {
+        if (o?.equipped !== undefined) fail('item(): only inventory items can be equipped');
+        const level = getLevel(state);
+        const terr = level.palette[level.cells[where.y * level.width + where.x] ?? -1];
+        if (terr === undefined || !engine.registry.terrain(terr).passable)
+          fail(`item(): ${JSON.stringify(where)} is not passable terrain`);
+        state.entities[String(id)] = {
+          id,
+          def,
+          c: { item: comp, pos: { level: level.id, x: where.x, y: where.y } },
+        };
+      }
+      refresh();
+    },
+    clearInventory() {
+      for (const e of inventoryOf(state, state.playerId)) delete state.entities[String(e.id)];
+    },
+    expectInventory(spec, o) {
+      const left = inventoryOf(state, state.playerId);
+      const missing: string[] = [];
+      for (const sp of spec) {
+        const w = typeof sp === 'string' ? { def: sp } : sp;
+        const at = left.findIndex((e) => {
+          const it = e.c.item;
+          return (
+            it !== undefined &&
+            e.def === w.def &&
+            ('quantity' in w ? it.quantity === w.quantity : true) &&
+            ('letter' in w ? it.letter === w.letter : true) &&
+            ('equipped' in w ? it.equipped === w.equipped : true) &&
+            ('buc' in w ? it.buc === w.buc : true) &&
+            ('spe' in w ? it.spe === w.spe : true)
+          );
+        });
+        if (at < 0) missing.push(JSON.stringify(sp));
+        else left.splice(at, 1);
+      }
+      if (missing.length > 0)
+        fail(`inventory lacks ${missing.join(', ')}\ninventory: ${describeInventory()}`);
+      if ((o?.only ?? true) && left.length > 0)
+        fail(`inventory has unexpected items\ninventory: ${describeInventory()}`);
+    },
+    expectWielded(def) {
+      const w = inventoryOf(state, state.playerId).find((e) => e.c.item?.equipped === 'weapon');
+      if ((w?.def ?? null) !== def)
+        fail(`expected wielded ${def ?? 'nothing'}, found ${w?.def ?? 'nothing'}`);
+    },
+    expectAc(n) {
+      const ac = buildSnapshot(engine.registry, state).status['ac'];
+      if (ac !== n) fail(`expected AC ${n}, found ${String(ac)}`);
+    },
+    expectItemAt(p, def, quantity) {
+      const here = itemsAt(engine.registry, state, state.currentLevel, p.x, p.y);
+      const hit = here.find(
+        (e) => e.def === def && (quantity === undefined || e.c.item?.quantity === quantity),
+      );
+      if (!hit)
+        fail(
+          `expected ${def}${quantity === undefined ? '' : ` x${quantity}`} at ${JSON.stringify(p)}, ` +
+            `found [${here.map((e) => `${e.def} x${e.c.item?.quantity ?? 0}`).join(', ')}]`,
+        );
+    },
+    expectNoItemAt(p) {
+      const here = itemsAt(engine.registry, state, state.currentLevel, p.x, p.y);
+      if (here.length > 0)
+        fail(
+          `expected no items at ${JSON.stringify(p)}, found [${here.map((e) => e.def).join(', ')}]`,
+        );
+    },
+    setHunger(nutrition) {
+      const h = getPlayer(state).c.hunger;
+      if (!h) return fail('hero has no hunger component');
+      h.nutrition = nutrition;
+      // ref: src/eat.c newuhs() thresholds
+      h.state =
+        nutrition > 1000
+          ? 'satiated'
+          : nutrition > 150
+            ? 'not_hungry'
+            : nutrition > 50
+              ? 'hungry'
+              : nutrition > 0
+                ? 'weak'
+                : 'fainting';
+    },
+    expectHunger(want) {
+      const h = getPlayer(state).c.hunger;
+      if (h?.state !== want)
+        fail(
+          `expected hunger '${want}', found '${h?.state ?? 'none'}' (nutrition ${h?.nutrition ?? '-'})`,
+        );
     },
     level(ascii, o) {
       buildLevel(ascii, o?.lit ?? true);

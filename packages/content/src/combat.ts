@@ -13,11 +13,13 @@ import {
   type Pos,
   type Rng,
 } from '@nh/core';
-import { xkilledCorpse } from './corpses';
+import { monsterDied } from './mondeath';
+import { xnameOf } from './objnam';
 import { stopOccupation } from './eat';
 import { experienceFor, gainExperience } from './hero';
 import { gethungry } from './hunger';
 import { weight } from './items';
+import { heroSees, monWep, monWieldItem } from './mongear';
 import { findAc, findMac, nearCapacity } from './stats';
 import { P_UNSKILLED, BARE_HANDED, skillLevel, weaponDamBonus, weaponHitBonus } from './skills';
 
@@ -72,12 +74,12 @@ const KEBABABLE = 'XDJNH';
  * spear bonus against kebabable monsters. Not ported: blessed vs undead/demons, trident vs
  * swimmers, picks vs xorns, artifacts.
  */
-export function hitval(item: Entity, def: ObjectDef, mon: MonsterDef): number {
+export function hitval(item: Entity, def: ObjectDef, mon: MonsterDef | null): number {
   let tmp = 0;
   const w = def.weapon;
   if (w) tmp += item.c.item?.spe ?? 0;
   tmp += w?.hitBonus ?? 0;
-  if (w?.skill === 'spear' && KEBABABLE.includes(mon.glyph.ch)) tmp += 2;
+  if (w?.skill === 'spear' && mon && KEBABABLE.includes(mon.glyph.ch)) tmp += 2;
   return tmp;
 }
 
@@ -143,8 +145,12 @@ function dmgvalExtra(rng: Rng, id: string, big: boolean): number {
  * enchantment, never below 0. Not ported: erosion, silver/blessed bonuses, artifacts.
  */
 export function dmgval(rng: Rng, item: Entity, def: ObjectDef, mon: MonsterDef): number {
+  return dmgvalSized(rng, item, def, isBig(mon));
+}
+
+/** dmgval() against a target whose size class is already known (the hero is not big). */
+export function dmgvalSized(rng: Rng, item: Entity, def: ObjectDef, big: boolean): number {
   const w = def.weapon;
-  const big = isBig(mon);
   let tmp = 0;
   if (w) {
     const dice = big ? w.large : w.small;
@@ -268,9 +274,7 @@ export function heroAttack(ctx: Ctx, targetId: EntityId): number {
       key: nonliving(def) ? 'combat.you_destroy' : 'combat.you_kill',
       params: { mon: name },
     });
-    const at = target.c.pos;
-    ctx.remove(targetId);
-    if (at) xkilledCorpse(ctx, def, at);
+    monsterDied(ctx, targetId, true);
     gainExperience(ctx, hero.id, experienceFor(def, mon.level));
     return NORMAL_SPEED;
   }
@@ -306,6 +310,20 @@ export function monsterToHit(
   if (heroHelpless) tmp += 4; // multi < 0
   if (tmp <= 0) tmp = 1;
   return tmp;
+}
+
+/**
+ * "The dwarf swings its mattock." ref: src/mhitu.c mswings(), mswings_verb(): pierce-only
+ * weapons thrust (dual-purpose ones would randomize), the rest swing. No gender, so "its".
+ */
+function mswings(ctx: Ctx, mon: Entity, weapon: Entity): void {
+  const wdef = ctx.defs.object(weapon.def);
+  const one = (weapon.c.item?.quantity ?? 1) > 1 ? '_one_of' : '';
+  ctx.emit({
+    type: 'msg',
+    key: `mon.${wdef.weapon?.kind === 'pierce' ? 'thrusts' : 'swings'}${one}`,
+    params: { mon: `@${mon.def}`, weapon: xnameOf(ctx.state, ctx.defs, weapon) },
+  });
 }
 
 /** ref: src/mhitu.c hitmsg(): the verb by attack type. */
@@ -357,12 +375,24 @@ export function monsterAttack(ctx: Ctx, monId: EntityId): void {
   for (let i = 0; i < def.attacks.length; i++) {
     const atk = def.attacks[i];
     if (!atk || !MELEE_AT.has(atk.at)) continue; // other attack types: M3+
+    // ref: src/mhitu.c mattacku() AT_WEAP: wield a weapon first if one is wanted (the move is
+    // spent), then add the weapon's to-hit and announce the swing before rolling
+    let attackTmp = tmp;
+    let mwep: Entity | null = null;
+    if (atk.at === 'weapon') {
+      if (monWieldItem(ctx, monId)) continue;
+      mwep = monWep(ctx, monId);
+      if (mwep) {
+        attackTmp += hitval(mwep, ctx.defs.object(mwep.def), null);
+        if (mon.c.pos && heroSees(ctx, mon.c.pos)) mswings(ctx, mon, mwep);
+      }
+    }
     const j = ctx.rng.rnd(20 + i);
-    if (!(tmp > j)) {
+    if (!(attackTmp > j)) {
       // ref: src/mhitu.c missmu(): "just misses" when the roll equals tmp exactly (verbose)
       ctx.emit({
         type: 'msg',
-        key: tmp === j ? 'combat.mon_just_misses' : 'combat.mon_misses',
+        key: attackTmp === j ? 'combat.mon_just_misses' : 'combat.mon_misses',
         params: { mon: name },
       });
       prevHit = -1;
@@ -370,6 +400,11 @@ export function monsterAttack(ctx: Ctx, monId: EntityId): void {
     }
     // ref: src/mhitu.c hitmu(): base damage d(damn, damd), then hitmsg()
     let dmg = ctx.rng.d(atk.n, atk.d);
+    if (atk.at === 'weapon' && mwep) {
+      // ref: src/uhitm.c mhitm_ad_phys() "hand to hand weapon": damage += dmgval(otmp, hero)
+      dmg += dmgvalSized(ctx.rng, mwep, ctx.defs.object(mwep.def), false);
+      if (dmg <= 0) dmg = 1;
+    }
     const again = prevHit === i - 1 && def.attacks[i - 1]?.at === atk.at;
     ctx.emit({
       type: 'msg',

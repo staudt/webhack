@@ -15,6 +15,7 @@ import {
   type MonsterDef,
   type Pos,
 } from '@nh/core';
+import { givePossessions } from './mongear';
 
 /**
  * The stub hero is a neutral human Valkyrie; neutral is alignment type 0 and the Valkyrie's
@@ -26,7 +27,8 @@ export const HERO_ALIGN_RECORD = 0;
 /** ref: src/allmain.c maybe_generate_rnd_mon(): 1 in 70 per turn above the Castle's depth */
 export const SPAWN_ODDS = 70;
 
-const heroLevel = (ctx: Ctx): number => getPlayer(ctx.state).c.experience?.level ?? 1;
+const heroLevel = (ctx: Pick<Ctx, 'state'>): number =>
+  getPlayer(ctx.state).c.experience?.level ?? 1;
 
 /** ref: include/monst.h monmin_difficulty() */
 export const monminDifficulty = (levdif: number): number => Math.trunc(levdif / 6);
@@ -53,7 +55,10 @@ function alignShift(_def: MonsterDef): number {
  * A random monster type appropriate for a level of difficulty `depth` (and the hero's level).
  * ref: src/makemon.c rndmonst_adj() weighted reservoir sampling; returns null if none qualify.
  */
-export function rndmonst(ctx: Ctx, depth: number): MonsterDef | null {
+export function rndmonst(
+  ctx: Pick<Ctx, 'state' | 'rng' | 'defs'>,
+  depth: number,
+): MonsterDef | null {
   const minmlev = monminDifficulty(depth);
   const maxmlev = monmaxDifficulty(depth, heroLevel(ctx));
   let total = 0;
@@ -118,7 +123,7 @@ const occupiedSet = (ctx: Ctx, level: Level): Set<number> => {
   const s = new Set<number>();
   for (const e of Object.values(ctx.state.entities)) {
     const p = e.c.pos;
-    if (p && p.level === level.id) s.add(cellIndex(level, p.x, p.y));
+    if (p && p.level === level.id && e.c.item === undefined) s.add(cellIndex(level, p.x, p.y));
   }
   return s;
 };
@@ -206,6 +211,8 @@ export interface MakemonOpts {
   angry?: boolean;
   /** Use enexto() when the spot is taken (MM_ADJACENTOK). */
   adjacentOk?: boolean;
+  /** No starting weapons, armor or gold (MM_NOINVENT). */
+  noInventory?: boolean;
 }
 
 /**
@@ -261,6 +268,9 @@ export function makemon(
       else initgrp(ctx, mdef, at, 3, opts, level.id);
     }
   }
+  // ref: makemon(): after any group, "equip with weapons / armor" (m_initweap, m_initinv,
+  // m_dowear(creation))
+  if (!opts.noInventory) givePossessions(ctx, id, level.depth);
   return id;
 }
 
@@ -292,23 +302,10 @@ function initgrp(
   }
 }
 
-/** Registers level population and random spawning. */
+/**
+ * Registers random spawning. (Level population is in mklev.ts, which fills each room.)
+ */
 export function registerGeneration(api: ModApi): void {
-  // ref: src/mklev.c fill_ordinary_room(): 1 in 3 rooms gets a monster at a random free spot
-  api.on('newLevel', (ctx, level) => {
-    const rules = cellRules(level, ctx.defs);
-    for (const room of level.rooms) {
-      if (ctx.rng.rn2(3) !== 0) continue;
-      // ref: src/mkroom.c somexyspace(): up to 100 tries for a free ordinary spot
-      for (let t = 0; t < 100; t++) {
-        const x = room.lx + ctx.rng.rn2(room.hx - room.lx + 1);
-        const y = room.ly + ctx.rng.rn2(room.hy - room.ly + 1);
-        if (!goodpos(level, rules, occupiedSet(ctx, level), x, y)) continue;
-        makemon(ctx, null, { x, y }, { level: level.id, nogroup: true });
-        break;
-      }
-    }
-  });
   // ref: src/allmain.c maybe_generate_rnd_mon()
   api.on('endOfTurn', (ctx) => {
     if (ctx.state.gameOver === null && ctx.rng.rn2(SPAWN_ODDS) === 0) makemon(ctx, null, null);

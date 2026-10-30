@@ -3,12 +3,14 @@ import { objectMessagesEn } from './objects.en';
 import { itemMessagesEn } from './items.en';
 import { magicMessagesEn } from './magic.en';
 import { eatMessagesEn } from './eat.en';
+import { monGearMessagesEn } from './mongear.en';
 
 export const messagesEn: Record<string, string> = {
   ...objectMessagesEn,
   ...itemMessagesEn,
   ...magicMessagesEn,
   ...eatMessagesEn,
+  ...monGearMessagesEn,
   welcome: 'Hello, welcome to webhack! You are a {role}.',
   'welcome.back': 'Hello, welcome back to webhack! You are a {role}.',
   'door.opens': 'The door opens.',

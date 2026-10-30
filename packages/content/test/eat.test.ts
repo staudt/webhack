@@ -122,8 +122,12 @@ describe('hunger', () => {
     heroHunger(s).nutrition = -150;
     heroHunger(s).state = 'fainting';
     const keys: string[] = [];
-    for (let i = 0; i < 2000 && !s.state.gameOver; i++)
+    for (let i = 0; i < 2000 && !s.state.gameOver; i++) {
+      // random spawns would eventually chew through the hero's 5000 HP while she faints
+      for (const k of Object.keys(s.state.entities))
+        if (s.state.entities[k]?.c.monster) delete s.state.entities[k];
       keys.push(...s.msgKeys(s.step({ type: 'wait' })));
+    }
     expect(s.state.gameOver?.kind).toBe('died');
     expect(s.state.gameOver?.killer).toBe('@killer.starvation');
     expect(keys).toContain('hunger.starve');

@@ -1,5 +1,12 @@
 import { vanillaMod } from '@nh/content';
-import { createEngine, getPlayer, type EntityId, type GameState, type Mod } from '@nh/core';
+import {
+  createEngine,
+  getPlayer,
+  inventoryOf,
+  type EntityId,
+  type GameState,
+  type Mod,
+} from '@nh/core';
 import { describe, expect, test } from 'vitest';
 import { checkInvariants } from '../src/index';
 
@@ -38,7 +45,7 @@ interface Opts {
   pos?: boolean;
   carriedBy?: number | null;
   letter?: string | null;
-  equipped?: 'weapon' | null;
+  equipped?: import('@nh/core').EquipSlot | null;
   quantity?: number;
 }
 function add(s: GameState, o: Opts = {}): EntityId {
@@ -126,5 +133,68 @@ describe('item invariants', () => {
     const s = fresh();
     add(s, { def: 'zz:nothing' });
     expect(errs(s)).toMatch(/'zz:nothing' is not a registered object/);
+  });
+});
+
+describe('carrier, equipment and hunger invariants', () => {
+  const bare = (): GameState => {
+    const s = fresh();
+    for (const e of inventoryOf(s, s.playerId)) delete s.entities[String(e.id)];
+    return s;
+  };
+  const heroCarries = (s: GameState, o: Opts): EntityId =>
+    add(s, { pos: false, carriedBy: s.playerId, letter: 'y', ...o });
+
+  test('two wielded items for one carrier', () => {
+    const s = bare();
+    heroCarries(s, { equipped: 'weapon', letter: 'x' });
+    expect(errs(s)).toBe('');
+    heroCarries(s, { equipped: 'weapon', letter: 'z' });
+    expect(errs(s)).toMatch(/both occupy slot/);
+  });
+
+  test('a monster that is off any level cannot carry', () => {
+    const s = bare();
+    const mon = s.nextEntityId++;
+    s.entities[String(mon)] = { id: mon, def: getPlayer(s).def, c: {} };
+    add(s, { pos: false, carriedBy: mon });
+    expect(errs(s)).toMatch(/is not on a level/);
+    s.entities[String(mon)]!.c.pos = { level: 'nowhere', x: 0, y: 0 };
+    expect(errs(s)).toMatch(/is not on a level/);
+  });
+
+  test('hero letters must be in $a-zA-Z#', () => {
+    const s = bare();
+    heroCarries(s, { letter: '#' });
+    expect(errs(s)).toBe('');
+    heroCarries(s, { letter: '$' });
+    expect(errs(s)).toBe('');
+    heroCarries(s, { letter: '!' });
+    expect(errs(s)).toMatch(/not in \$a-zA-Z#/);
+    const t = bare();
+    heroCarries(t, { letter: null });
+    expect(errs(t)).toMatch(/not in \$a-zA-Z#/);
+  });
+
+  test('armor in the wrong slot', () => {
+    const s = bare();
+    heroCarries(s, { def: 'nh:small_shield', equipped: 'shield' });
+    expect(errs(s)).toBe('');
+    heroCarries(s, { def: 'nh:small_shield', equipped: 'helm', letter: 'q' });
+    expect(errs(s)).toMatch(/worn in slot helm/);
+  });
+
+  test('nutrition must be an integer', () => {
+    const s = bare();
+    getPlayer(s).c.hunger!.nutrition = 12.5;
+    expect(errs(s)).toMatch(/nutrition 12.5 is not an integer/);
+  });
+
+  test('helpless must lie in the future', () => {
+    const s = bare();
+    getPlayer(s).c.helpless = { until: s.turn + 3, reasonKey: 'x' };
+    expect(errs(s)).toBe('');
+    getPlayer(s).c.helpless = { until: s.turn, reasonKey: 'x' };
+    expect(errs(s)).toMatch(/helpless until/);
   });
 });

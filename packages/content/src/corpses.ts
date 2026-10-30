@@ -14,7 +14,7 @@ const bigmonst = (def: MonsterDef): boolean =>
   def.size === 'large' || def.size === 'huge' || def.size === 'gigantic';
 
 /** ref: src/rnd.c rnz(): a number around `i`, widely spread, geometric in feel */
-export function rnz(ctx: Ctx, i: number): number {
+export function rnz(ctx: Pick<Ctx, 'state' | 'rng'>, i: number): number {
   const lvl = getPlayer(ctx.state).c.experience?.level ?? 1;
   let x = i;
   let tmp = 1000;
@@ -63,10 +63,14 @@ export function xkilledCorpse(
  * corpse's age counts toward ROT_AGE and the time varies by rnz(10) - 10 (rnz(25) - 25 for
  * level creation). Lizards, lichens, trolls (revive) and Riders are not handled.
  */
-export function startCorpseTimeout(ctx: Ctx, id: number): void {
+export function startCorpseTimeout(
+  ctx: Pick<Ctx, 'state' | 'rng' | 'schedule'>,
+  id: number,
+  inMklev = false,
+): void {
   const it = ctx.state.entities[String(id)]?.c.item;
   if (!it) return;
-  const rotAdjust = 10;
+  const rotAdjust = inMklev ? 25 : 10; // ref: gi.in_mklev ? 25 : 10
   const age = Math.max(ctx.state.turn, 1) - (it.age ?? 0);
   let when = age > ROT_AGE ? rotAdjust : ROT_AGE - age;
   when += rnz(ctx, rotAdjust) - rotAdjust;

@@ -30,7 +30,7 @@ export function rne(rng: Rng, x: number, heroLevel: number): number {
   return tmp;
 }
 
-const heroLevelOf = (ctx: ItemCtx): number =>
+const heroLevelOf = (ctx: Pick<ItemCtx, 'state'>): number =>
   ctx.state.entities[String(ctx.state.playerId)]?.c.experience?.level ?? 1;
 
 /** ref: src/mkobj.c blessorcurse() */
@@ -46,7 +46,12 @@ function blessorcurse(rng: Rng, it: ItemComponent, chance: number): void {
  * poison, no artifacts, no erosion; food has no corpse/egg/tin/slime-mold special cases (the
  * corpse is made through mkcorpse(), which supplies the monster).
  */
-function mksobjInit(ctx: ItemCtx, def: ObjectDef, it: ItemComponent): void {
+export function mksobjInit(
+  ctx: Pick<ItemCtx, 'state' | 'rng'>,
+  def: Pick<ObjectDef, 'id' | 'class'>,
+  it: ItemComponent,
+  artif = false,
+): void {
   const rng = ctx.rng;
   const lvl = heroLevelOf(ctx);
   switch (def.class) {
@@ -58,6 +63,8 @@ function mksobjInit(ctx: ItemCtx, def: ObjectDef, it: ItemComponent): void {
         it.buc = 'cursed';
         it.spe = -rne(rng, 3, lvl);
       } else blessorcurse(rng, it, 10);
+      // ref: mksobj_init(): `artif && !rn2(20 + 10 * nartifact_exist())`; no artifacts exist
+      if (artif) rng.rn2(20);
       break;
     case 'food':
       it.eaten = 0;
@@ -76,6 +83,7 @@ function mksobjInit(ctx: ItemCtx, def: ObjectDef, it: ItemComponent): void {
         it.buc = rng.rn2(2) === 0 ? 'uncursed' : 'blessed';
         it.spe = rne(rng, 3, lvl);
       } else blessorcurse(rng, it, 10);
+      if (artif) rng.rn2(40); // ref: `artif && !rn2(40 + 10 * nartifact_exist())`
       break;
     case 'coin':
       break;
@@ -93,6 +101,8 @@ export interface MksobjOpts {
   carriedBy?: EntityId;
   /** Corpses only: the monster. */
   corpseOf?: DefId;
+  /** mksobj's `artif`: rolls the artifact chance (the roll is made; no artifact results). */
+  artif?: boolean;
 }
 
 /**
@@ -118,7 +128,7 @@ export function mksobj(ctx: ItemCtx, def: ObjectDef, opts: MksobjOpts = {}): Ent
     if (!opts.corpseOf) throw new Error('mksobj: a corpse needs corpseOf (use mkcorpse)');
     it.corpseOf = opts.corpseOf;
   }
-  if (opts.init ?? true) mksobjInit(ctx, def, it);
+  if (opts.init ?? true) mksobjInit(ctx, def, it, opts.artif === true);
   if (opts.quantity !== undefined) it.quantity = opts.quantity;
   const id = ctx.spawn({ def: def.id, c: { item: it } });
   if (opts.at) return placeOnFloor(ctx, id, opts.at.level, opts.at.x, opts.at.y);

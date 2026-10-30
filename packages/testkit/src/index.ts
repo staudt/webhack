@@ -3,6 +3,8 @@ export const TESTKIT_VERSION = 1;
 export { createScenario, runScenario, DEFAULT_LEGEND } from './scenario';
 export type {
   AsciiLegend,
+  ItemOpts,
+  ItemSpec,
   ScenarioBuilder,
   ScenarioFn,
   ScenarioOptions,

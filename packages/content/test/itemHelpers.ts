@@ -18,12 +18,18 @@ export const obj = (id: string) => defs.object(id as never);
 
 export interface TestCtx extends ItemCtx {
   events: GameEvent[];
+  /** Timers asked for (not run). */
+  scheduled: { delay: number; kind: string }[];
+  schedule(delay: number, kind: string, data: unknown): void;
 }
 
 /** A minimal Ctx for the item functions; its rng draws from (and advances) the state's. */
 export function ctxFor(state: GameState): TestCtx {
   const events: GameEvent[] = [];
+  const scheduled: { delay: number; kind: string }[] = [];
   return {
+    schedule: (delay, kind) => scheduled.push({ delay, kind }),
+    scheduled,
     state,
     rng: createRng(state.rng.core),
     defs,
