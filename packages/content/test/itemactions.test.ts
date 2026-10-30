@@ -416,7 +416,7 @@ describe('wield', () => {
       .query(s.state)
       .actionsFor({ kind: 'item', id: spear })
       .find((o) => o.labelKey === 'action.nh:wield_nothing');
-    expect(nothing?.action).toEqual({ type: 'mod', action: 'nh:wield', args: { item: null } });
+    expect(nothing?.action).toEqual({ type: 'mod', action: 'nh:unwield', args: { item: null } });
   });
 
   test('wielding another weapon swaps, prints the line and costs a move', () => {

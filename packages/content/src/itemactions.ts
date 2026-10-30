@@ -506,12 +506,6 @@ const wield: ActionDef = {
     const e = heroItem(ctx, target.id);
     const it = e?.c.item;
     if (!e || !it) return [];
-    if (it.equipped === 'weapon') {
-      // "Wield nothing": not offered once the weapon is known to be cursed (it would stay welded)
-      return it.known.buc && it.buc === 'cursed'
-        ? []
-        : [itemOffer('nh:wield', e.id, 'action.nh:wield_nothing', null)];
-    }
     return defOf(ctx, e).class === 'weapon' && it.equipped === null
       ? [itemOffer('nh:wield', e.id, 'action.nh:wield')]
       : [];
@@ -579,6 +573,26 @@ function unwield(ctx: Ctx, cur: Entity): number {
   ctx.emit({ type: 'msg', key: 'wield.you_are', params: { how: { key: handsKey(ctx) } } });
   return NORMAL_SPEED;
 }
+
+/**
+ * "Wield nothing" (w-) as its own action, offered on the wielded item, so pickers for `w`
+ * list only things you could wield. Not offered once the weapon is known to be cursed.
+ */
+const unwieldAction: ActionDef = {
+  id: 'nh:unwield',
+  labelKey: 'action.nh:wield_nothing',
+  handles: 'mod',
+  offer(ctx, target) {
+    if (target.kind !== 'item') return [];
+    const e = heroItem(ctx, target.id);
+    const it = e?.c.item;
+    if (!e || !it || it.equipped !== 'weapon') return [];
+    return it.known.buc && it.buc === 'cursed'
+      ? []
+      : [itemOffer('nh:unwield', e.id, 'action.nh:wield_nothing', null)];
+  },
+  perform: (ctx) => wield.perform(ctx, { type: 'mod', action: 'nh:wield', args: { item: null } }),
+};
 
 // ---------------------------------------------------------------------------------------------
 // wear / take off
@@ -828,6 +842,7 @@ export const ITEM_ACTIONS: readonly ActionDef[] = [
   drop,
   dropMany,
   wield,
+  unwieldAction,
   wear,
   takeoff,
   discoveries,

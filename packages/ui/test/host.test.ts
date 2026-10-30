@@ -487,7 +487,7 @@ const item = (
 ): ViewItem => ({
   id,
   letter,
-  g: `nh:${name}`,
+  g: `nh:${name.replace('wielded_', '')}`,
   cls,
   name: { key: `obj.${name}` },
   equipped: eq ? (cls === 'weapon' ? 'weapon' : 'body') : null,
@@ -506,7 +506,13 @@ const invView = (inventory: ViewItem[]): ViewUpdate =>
     status: {},
     inventory,
   }) as unknown as ViewUpdate;
-const msgs = { 'obj.dagger': 'a dagger', 'obj.ration': 'a food ration', 'obj.mail': 'a mail' };
+// Names come from content's doname: no article, with the equipped suffix included.
+const msgs = {
+  'obj.dagger': 'dagger',
+  'obj.ration': 'food ration',
+  'obj.mail': 'mail',
+  'obj.wielded_dagger': 'dagger (weapon in hand)',
+};
 
 describe('inventory, pickers, multi-select, list', () => {
   test('inventory sheet: grouped, suffixes, live update, tap -> actionsFor item -> act', async () => {
@@ -525,7 +531,7 @@ describe('inventory, pickers, multi-select, list', () => {
       ]);
     };
     m.ui.update(
-      invView([item(2, 'b', 'food', 'ration'), item(1, 'a', 'weapon', 'dagger', true)]),
+      invView([item(2, 'b', 'food', 'ration'), item(1, 'a', 'weapon', 'wielded_dagger', true)]),
       [],
       null,
     );
@@ -694,8 +700,8 @@ describe('inventory, pickers, multi-select, list', () => {
     );
     expect(m.root.querySelector('.nh-sheet-title')?.textContent).toBe('Discoveries');
     expect([...m.root.querySelectorAll('.nh-sheet-text')].map((e) => e.textContent)).toEqual([
-      'a dagger',
-      'a mail',
+      'dagger',
+      'mail',
     ]);
     btns(m.root)[0]!.click();
     expect(btns(m.root)).toHaveLength(0);

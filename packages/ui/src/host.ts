@@ -22,7 +22,7 @@ import { attachKeyUp, attachKeys, attachTap } from './input';
 import { DEFAULT_LOCALE, mergeMessages, translate, uiMessagesEn, type Catalogs } from './i18n';
 import { buildLayout } from './layout';
 import { Keymap } from './keymap';
-import { classKey, equippedKey, groupInventory } from './inventory';
+import { classKey, groupInventory } from './inventory';
 import { openChecklist, openMenu, type MenuEntry, type OpenMenu } from './menu';
 import { createMessageLog } from './messageLog';
 import { injectStyles } from './styles';
@@ -217,14 +217,11 @@ export function createUi(opts: UiOptions): Ui {
     });
   };
 
-  const itemLabel = (it: ViewItem): string => {
-    const name = t(it.name.key, it.name.params);
-    if (it.letter === null) return name;
-    const eq = equippedKey(it);
-    return eq
-      ? t('ui.item.equipped', { letter: it.letter, name, how: t(eq) })
-      : t('ui.item', { letter: it.letter, name });
-  };
+  // The item name (doname) already says "(weapon in hand)" / "(being worn)".
+  const itemLabel = (it: ViewItem): string =>
+    it.letter === null
+      ? t('ui.item.unlettered', { name: it.name })
+      : t('ui.item', { letter: it.letter, name: it.name });
   const itemEntry = (it: ViewItem, run: () => void): MenuEntry => {
     const glyph = glyphOf(it.g);
     return { label: itemLabel(it), run, ...(glyph ? { glyph } : {}) };
@@ -300,7 +297,7 @@ export function createUi(opts: UiOptions): Ui {
     if (d.terrain !== null) names.push(t(d.terrain));
     const [top] = d.objects;
     if (top) {
-      names.push(t(top.name.key, top.name.params));
+      names.push(t('ui.look.object', { name: top.name }));
       const more = d.objects.length - 1;
       if (more === 1) names.push(t('ui.look.more1'));
       else if (more > 1) names.push(t('ui.look.more', { n: more }));
