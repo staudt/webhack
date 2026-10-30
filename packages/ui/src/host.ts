@@ -259,20 +259,30 @@ export function createUi(opts: UiOptions): Ui {
   const openInventory = (): void => showInventory();
 
   /** Ask which inventory items offer `actionId` and let the player choose one. */
+  /**
+   * Item picker for a key like `e`: things on the floor offered for this action come first
+   * (NetHack's "There is a X here; eat it?"), then inventory items that offer it.
+   */
   const pickItem = (actionId: string): void => {
     const items = inventory;
-    void Promise.all(items.map((it) => game.query.actionsFor({ kind: 'item', id: it.id }))).then(
-      (all) => {
-        if (destroyed) return;
-        const entries: MenuEntry[] = [];
-        items.forEach((it, i) => {
-          const o = all[i]?.find((x) => x.action.type === 'mod' && x.action.action === actionId);
-          if (o) entries.push(itemEntry(it, () => game.act(o.action)));
-        });
-        if (entries.length === 0) log.push(t(`ui.pick.none.${actionId}`));
-        else showModal(t(`ui.pick.${actionId}`), entries, true);
-      },
-    );
+    const matches = (x: ActionOffer): boolean =>
+      x.action.type === 'mod' && x.action.action === actionId;
+    void Promise.all([
+      game.query.actionsFor({ kind: 'self' }),
+      ...items.map((it) => game.query.actionsFor({ kind: 'item', id: it.id })),
+    ]).then(([self, ...all]) => {
+      if (destroyed) return;
+      const entries: MenuEntry[] = (self ?? []).filter(matches).map((o) => ({
+        label: t(o.labelKey, o.params),
+        run: () => game.act(o.action),
+      }));
+      items.forEach((it, i) => {
+        const o = all[i]?.find(matches);
+        if (o) entries.push(itemEntry(it, () => game.act(o.action)));
+      });
+      if (entries.length === 0) log.push(t(`ui.pick.none.${actionId}`));
+      else showModal(t(`ui.pick.${actionId}`), entries, true);
+    });
   };
 
   /** Perform the self offer carrying mod action `actionId`, if there is one. */

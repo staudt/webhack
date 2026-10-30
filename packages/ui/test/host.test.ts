@@ -633,6 +633,51 @@ describe('inventory, pickers, multi-select, list', () => {
     expect(m.acts.at(-1)).toEqual({ type: 'mod', action: 'nh:pickup' });
   });
 
+  test('pick:<action> lists matching floor offers first (eat the corpse here)', async () => {
+    const mod: ClientMod = {
+      id: 'k',
+      version: '1',
+      register: (api) => api.bindKey('e', { type: 'ui', id: 'pick:nh:eat' }),
+    };
+    const m = mk({ mods: [defaultKeymap, mod] });
+    ui = m.ui;
+    m.ui.api.addMessages('en', {
+      ...msgs,
+      'here.eat': 'Eat the {item} here',
+      'nh:corpse': '{mon} corpse',
+      'nh:jackal': 'jackal',
+      'ui.pick.nh:eat': 'What do you want to eat?',
+    });
+    const eat = (item: number, labelKey: string, params?: ActionOffer['params']): ActionOffer => ({
+      action: { type: 'mod', action: 'nh:eat', args: { item } } as PlayerAction,
+      labelKey,
+      ...(params ? { params } : {}),
+      source: 't',
+    });
+    m.game.query.actionsFor = (t) =>
+      Promise.resolve(
+        t.kind === 'self'
+          ? [eat(9, 'here.eat', { item: { key: 'nh:corpse', params: { mon: '@nh:jackal' } } })]
+          : 'id' in t && t.id === 2
+            ? [eat(2, 'E')]
+            : [],
+      );
+    m.ui.update(
+      invView([item(1, 'a', 'weapon', 'dagger'), item(2, 'b', 'food', 'ration')]),
+      [],
+      null,
+    );
+    key('e');
+    await flush();
+    expect(btns(m.root).map((b) => b.textContent)).toEqual([
+      'Eat the jackal corpse here',
+      'b - a food ration',
+      'Cancel',
+    ]);
+    btns(m.root)[0]!.click();
+    expect(m.acts).toEqual([{ type: 'mod', action: 'nh:eat', args: { item: 9 } }]);
+  });
+
   const multi: Prompt = {
     id: 'p1',
     kind: 'menu',
