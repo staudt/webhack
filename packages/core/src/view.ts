@@ -2,8 +2,23 @@ import { getLevel, getPlayer } from './state';
 import type { DefId, Glyph } from './types/common';
 import type { Registry } from './types/mod';
 import type { GameState } from './types/state';
-import type { ViewCell, ViewDelta, ViewEntity, ViewSnapshot, ViewUpdate } from './types/view';
+import type { Status, ViewCell, ViewDelta, ViewEntity, ViewSnapshot, ViewUpdate } from './types/view';
 import { sortedIds } from './util';
+
+/** Bottom-line values (ref: src/botl.c); absent components are simply left out. */
+function statusOf(state: GameState, depth: number): Status {
+  const c = getPlayer(state).c;
+  const status: Status = { dlvl: depth, turn: state.turn };
+  if (c.hp) Object.assign(status, { hp: c.hp.cur, hpmax: c.hp.max });
+  if (c.gear) status.ac = c.gear.ac;
+  if (c.experience) Object.assign(status, { xl: c.experience.level, xp: c.experience.points });
+  if (c.attributes) Object.assign(status, c.attributes);
+  if (state.gameOver) {
+    const g = state.gameOver;
+    Object.assign(status, { dead: g.kind, killer: g.killer, endTurn: g.turn, endDepth: g.depth, endLevel: g.level });
+  }
+  return status;
+}
 
 /** Builds the full player-facing view of the game. Never exposes unseen state. */
 export function buildSnapshot(registry: Registry, state: GameState): ViewSnapshot {
@@ -15,11 +30,14 @@ export function buildSnapshot(registry: Registry, state: GameState): ViewSnapsho
   const glyphs: [DefId, Glyph][] = [
     ...registry.terrains.map((t): [DefId, Glyph] => [t.id, t.glyph]),
     ...registry.roles.map((r): [DefId, Glyph] => [r.id, r.glyph]),
+    ...registry.monsters.map((m): [DefId, Glyph] => [m.id, m.glyph]),
   ];
   glyphs.sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0));
   const legend: Record<DefId, Glyph> = {};
   for (const [id, g] of glyphs) legend[id] = { ch: g.ch, fg: g.fg };
 
+  // Clients see hidden terrain as what it looks like.
+  const shown = level.palette.map((id) => registry.terrain(id).looksLike ?? id);
   const memory = state.memory[level.id];
   const visible = state.visible;
   const n = level.width * level.height;
@@ -29,7 +47,7 @@ export function buildSnapshot(registry: Registry, state: GameState): ViewSnapsho
     while (vp < visible.length && (visible[vp] as number) < i) vp++;
     const v = vp < visible.length && visible[vp] === i;
     const m = memory?.[i] ?? -1;
-    cells[i] = { g: m >= 0 ? (level.palette[m] ?? null) : null, v };
+    cells[i] = { g: m >= 0 ? (shown[m] ?? null) : null, v };
   }
 
   const isVis = new Set(visible);
@@ -52,7 +70,7 @@ export function buildSnapshot(registry: Registry, state: GameState): ViewSnapsho
     entities,
     player: { id: player.id, x: pos.x, y: pos.y },
     turn: state.turn,
-    status: { dlvl: level.depth, turn: state.turn },
+    status: statusOf(state, level.depth),
   };
 }
 

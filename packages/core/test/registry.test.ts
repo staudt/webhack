@@ -468,7 +468,7 @@ describe('hook validation', () => {
       {
         modId: 'm',
         path: "on('nope')",
-        reason: 'unknown hook; expected one of beforeAction, afterAction, endOfTurn, newLevel',
+        reason: 'unknown hook; expected one of beforeAction, afterAction, endOfTurn, newGame, newLevel',
       },
     ]);
   });
@@ -559,7 +559,7 @@ describe('multiple issues', () => {
         - [a] a:x glyph.ch: must be exactly one character
         - [a] a:x glyph.fg: must be a non-empty string
         - [a] a:r speed: must be a positive integer
-        - [a] on('bogus'): unknown hook; expected one of beforeAction, afterAction, endOfTurn, newLevel
+        - [a] on('bogus'): unknown hook; expected one of beforeAction, afterAction, endOfTurn, newGame, newLevel
         - [b] version: must be a non-empty string
         - [b] dependsOn: depends on unknown mod 'nope'"
     `);

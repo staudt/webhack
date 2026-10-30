@@ -1,3 +1,4 @@
+import type { DefId } from './types/common';
 import { cellRules } from './movement';
 import { findPath } from './path';
 import { getLevel, isVisible, playerPos } from './state';
@@ -13,6 +14,13 @@ const NO_RNG: Rng = new Proxy({} as Rng, {
     throw new Error('Queries must not use the RNG');
   },
 });
+
+const shownTerrain = (registry: Registry, id: DefId | undefined): DefId | null =>
+  id === undefined ? null : (registry.terrain(id).looksLike ?? id);
+
+const forbidden = (what: string) => (): never => {
+  throw new Error(`offer() must not ${what}`);
+};
 
 /** Read-only queries, answered from player knowledge (memory + current vision). */
 export function createQuery(registry: Registry, state: GameState): CoreQuery {
@@ -34,7 +42,7 @@ export function createQuery(registry: Registry, state: GameState): CoreQuery {
           })
         : [];
       return {
-        terrain: mem >= 0 ? (level.palette[mem] ?? null) : null,
+        terrain: mem >= 0 ? shownTerrain(registry, level.palette[mem]) : null,
         remembered: mem >= 0,
         visible,
         entities,
@@ -50,13 +58,16 @@ export function createQuery(registry: Registry, state: GameState): CoreQuery {
         cosmetic: NO_RNG,
         defs: registry,
         query,
-        emit() {
-          throw new Error('offer() must not emit events');
-        },
-        schedule() {
-          throw new Error('offer() must not schedule timers');
-        },
+        emit: forbidden('emit events'),
+        schedule: forbidden('schedule timers'),
+        spawn: forbidden('spawn entities'),
+        remove: forbidden('remove entities'),
+        goToLevel: forbidden('change level'),
+        ask: forbidden('ask prompts'),
+        interrupt: forbidden('interrupt'),
+        endGame: forbidden('end the game'),
       };
+      if (state.gameOver || state.pendingPrompt) return [];
       return registry.actions.flatMap((def) =>
         def.offer(ctx, t).map((o) => ({ ...o, source: def.mod })),
       );

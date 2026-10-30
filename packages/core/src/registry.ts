@@ -12,6 +12,9 @@ import type {
   RoleDef,
   TerrainDef,
   TimerDef,
+  MonsterDef,
+  BrainDef,
+  AttackType,
 } from './types/mod';
 
 export interface ModLoadIssue {
@@ -36,8 +39,13 @@ export class ModLoadError extends Error {
   }
 }
 
-const HOOK_NAMES: readonly HookName[] = ['beforeAction', 'afterAction', 'endOfTurn', 'newLevel'];
+const HOOK_NAMES: readonly HookName[] = ['beforeAction', 'afterAction', 'endOfTurn', 'newGame', 'newLevel'];
 const ACTION_TYPES: readonly ActionType[] = ['move', 'wait', 'search', 'answer', 'mod'];
+const ATTACK_TYPES: readonly AttackType[] = [
+  'claw', 'bite', 'kick', 'butt', 'touch', 'sting', 'hug', 'spit', 'engulf',
+  'breath', 'explode', 'boom', 'gaze', 'tentacle', 'weapon', 'magic',
+];
+const SIZES: readonly MonsterDef['size'][] = ['tiny', 'small', 'medium', 'large', 'huge', 'gigantic'];
 const MOD_ID = /^[a-z][a-z0-9_-]*$/;
 const DEF_NAME = /^[a-z][a-z0-9_-]*$/;
 
@@ -52,6 +60,8 @@ export function loadMods(mods: readonly Mod[]): Registry {
   const terrains = new Map<string, TerrainDef>();
   const roles = new Map<string, RoleDef>();
   const timers = new Map<string, TimerDef>();
+  const monsters = new Map<string, MonsterDef & { mod: string }>();
+  const brains = new Map<string, BrainDef>();
   const actions: (ActionDef & { mod: string })[] = [];
   const builtinHandlers = new Map<ActionType, string>();
   const allIds = new Set<string>();
@@ -157,6 +167,44 @@ export function loadMods(mods: readonly Mod[]): Registry {
         }
         actions.push({ ...d, mod: modId });
       },
+      defineMonster(d) {
+        if (!guard('defineMonster') || !checkId(d.id, 'monster')) return;
+        str(d.nameKey, 'nameKey', d.id);
+        glyph(d.glyph, d.id);
+        const int = (v: unknown, path: string, min: number, max: number): void => {
+          if (!Number.isInteger(v) || (v as number) < min || (v as number) > max)
+            issue(path, `must be an integer in [${min}, ${max}]`, d.id);
+        };
+        int(d.level, 'level', -1, 50);
+        int(d.speed, 'speed', 0, 50);
+        int(d.ac, 'ac', -20, 20);
+        int(d.mr, 'mr', 0, 100);
+        int(d.alignment, 'alignment', -128, 127);
+        int(d.frequency, 'frequency', 0, 7);
+        int(d.difficulty, 'difficulty', 0, 100);
+        if (!Array.isArray(d.attacks) || d.attacks.length > 6) issue('attacks', 'must be an array of at most 6 attacks', d.id);
+        else
+          d.attacks.forEach((a, i) => {
+            if (!ATTACK_TYPES.includes(a.at)) issue(`attacks[${i}].at`, `must be one of ${ATTACK_TYPES.join(', ')}`, d.id);
+            str(a.ad, `attacks[${i}].ad`, d.id);
+            int(a.n, `attacks[${i}].n`, 0, 100);
+            int(a.d, `attacks[${i}].d`, 0, 100);
+          });
+        if (!SIZES.includes(d.size)) issue('size', `must be one of ${SIZES.join(', ')}`, d.id);
+        if (d.group !== null && d.group !== 'small' && d.group !== 'large')
+          issue('group', "must be 'small', 'large' or null", d.id);
+        for (const [k, v] of [['flags', d.flags], ['genFlags', d.genFlags]] as const)
+          if (!Array.isArray(v) || v.some((f) => typeof f !== 'string' || f === ''))
+            issue(k, 'must be an array of non-empty strings', d.id);
+        if (typeof d.brain !== 'string') issue('brain', 'must be a brain id', d.id);
+        monsters.set(d.id, { ...d, mod: modId });
+      },
+      defineBrain(d) {
+        if (!guard('defineBrain') || !checkId(d.id, 'brain')) return;
+        fn(d.act, 'act', d.id);
+        if (d.movement !== undefined) fn(d.movement, 'movement', d.id);
+        brains.set(d.id, d);
+      },
       defineTimer(d) {
         if (!guard('defineTimer') || !checkId(d.id, 'timer')) return;
         fn(d.fire, 'fire', d.id);
@@ -187,6 +235,19 @@ export function loadMods(mods: readonly Mod[]): Registry {
     open = false;
     loaded.push({ id: modId, version: String(mod.version) });
   });
+
+  // Cross-references are checked once every mod has registered.
+  for (const t of terrains.values())
+    if (t.looksLike !== undefined && !terrains.has(t.looksLike))
+      issues.push({
+        modId: t.id.split(':')[0] ?? '?',
+        defId: t.id,
+        path: 'looksLike',
+        reason: `unknown terrain '${t.looksLike}'`,
+      });
+  for (const m of monsters.values())
+    if (typeof m.brain === 'string' && !brains.has(m.brain))
+      issues.push({ modId: m.mod, defId: m.id, path: 'brain', reason: `unknown brain '${m.brain}'` });
 
   if (issues.length > 0) throw new ModLoadError(issues);
 
@@ -222,6 +283,18 @@ export function loadMods(mods: readonly Mod[]): Registry {
       return t;
     },
     hasTimer: (id) => timers.has(id),
+    monster(id) {
+      const m = monsters.get(id);
+      if (!m) throw new Error(`Unknown monster '${id}'`);
+      return m;
+    },
+    isMonster: (id) => monsters.has(id),
+    brain(id) {
+      const b = brains.get(id);
+      if (!b) throw new Error(`Unknown brain '${id}'`);
+      return b;
+    },
+    monsters: [...monsters.values()],
     roles: roleList,
     terrains: terrainList,
     actions,

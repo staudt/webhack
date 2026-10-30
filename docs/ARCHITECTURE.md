@@ -36,7 +36,7 @@ interface ModRef {
 }
 
 interface GameState {
-  version: 1;
+  version: 2;
   seed: number;
   turn: number;
   nextEntityId: number;
@@ -51,6 +51,8 @@ interface GameState {
   visible: number[]; // sorted cell indices visible to the player now
   timers: Timer[]; // { at, seq, kind: DefId, data: Json }; sorted by (at, seq)
   modData: Record<string, Json>; // per-mod persistent data, keyed by mod id
+  gameOver: { kind: 'died' | 'escaped'; killer: string; turn: number; depth: number; level: number } | null;
+  pendingPrompt: { prompt: Prompt; handler: DefId; data: Json } | null; // next action must answer it
 }
 
 interface Entity {
@@ -62,7 +64,12 @@ interface Components {
   pos?: { level: LevelId; x: number; y: number };
   actor?: { energy: number; speed: number }; // NORMAL_SPEED = 12
   player?: { role: DefId };
-  // reserved for milestone 2: hp, monster, inventory, item
+  hp?: { cur: number; max: number };
+  attributes?: { str; int; wis; dex; con; cha }; // NetHack encoding; Str 18/xx stored as 19..118
+  experience?: { level: number; points: number };
+  gear?: { ac: number; weapon: { nameKey; small: Dice; large: Dice; enchant; skillBonus } | null }; // M2 stand-in for items
+  monster?: { level: number; peaceful: boolean; asleep: boolean; lastHero: Pos | null };
+  // reserved for milestone 3: inventory, item
 }
 
 interface Room {
@@ -141,13 +148,20 @@ interface Engine {
 }
 ```
 
-Each step does the following (ref: src/allmain.c moveloop):
+Each step does the following (ref: src/allmain.c moveloop_core):
 
-1. `beforeAction` hooks run, and any of them may cancel the action.
-2. The action's `perform` runs and returns its energy cost. The default cost is 12, and a cost of 0 means no time passes (for example, bumping a wall).
-3. `afterAction` hooks run.
-4. While the player has less than 12 energy, the turn ends: `turn++`, due timers fire, `endOfTurn` hooks run, and every actor gains `speed` energy, in sorted id order.
-5. Vision is recomputed and memory updated.
+1. If the game is over, the step throws. If a prompt is pending, the action must be its `answer`, which goes to the handler's `answer()`.
+2. `beforeAction` hooks run, and any of them may cancel the action.
+3. The action's `perform` runs and returns its energy cost. The default cost is 12, and a cost of 0 means no time passes (for example, bumping a wall). Vision is refreshed.
+4. `afterAction` hooks run.
+5. Until the hero has 12 energy again (ref: src/mon.c movemon):
+   - every monster on the current level with at least 12 energy pays 12 and runs its brain's `act`, in sorted id order;
+   - this repeats while any monster can still act;
+   - otherwise the turn ends: monsters gain `brain.movement()` (or their speed), the hero gains speed, `turn++`, due timers fire, and the `endOfTurn` hooks run.
+6. Vision is recomputed and memory updated.
+7. If the action has `continues()` and it returns true, steps 2–6 repeat inside the same `step()` call. This stops on cost 0, `ctx.interrupt()`, game over, a prompt, or after `MAX_REPEAT` repeats.
+
+The game stops at once (mid-turn, too) when `ctx.endGame` is called or a prompt is raised.
 
 Messages are always keys plus params. English text lives in `content/src/messages.en.ts` and is loaded on the client side.
 A string param that starts with `@` is itself a message key, which the UI translates before interpolating. For example, `{ key: 'welcome', params: { role: '@role.valkyrie' } }` becomes "… You are a Valkyrie.".
@@ -185,6 +199,23 @@ interface ActionDef {
   offer(ctx: Ctx, target: Target): Omit<ActionOffer, 'source'>[]; // the engine adds `source`
   perform(ctx: Ctx, action: PlayerAction): number; // energy cost
   handles: PlayerAction['type']; // at most one handler per built-in type; mod actions use 'mod'
+  answer?(ctx: Ctx, value: Json, data: Json): number; // answers a prompt this action raised
+  continues?(ctx: Ctx, action: PlayerAction): boolean; // multi-turn actions (travel)
+}
+interface MonsterDef {
+  // ref: include/permonst.h struct permonst
+  id: DefId; nameKey: string; glyph: { ch: string; fg: string };
+  level: number; speed: number; ac: number; mr: number; alignment: number;
+  attacks: { at: AttackType; ad: string; n: number; d: number }[]; // at most 6
+  size: 'tiny' | 'small' | 'medium' | 'large' | 'huge' | 'gigantic';
+  flags: string[]; frequency: number; group: 'small' | 'large' | null; genFlags: string[];
+  difficulty: number;
+  brain: DefId; // must name a registered BrainDef (checked after all mods load)
+}
+interface BrainDef {
+  id: DefId;
+  act(ctx: Ctx, self: EntityId): void; // the engine has already deducted 12 energy
+  movement?(ctx: Ctx, self: EntityId): number; // per-turn movement (ref: src/mon.c mcalcmove)
 }
 
 interface ModApi {
@@ -192,6 +223,8 @@ interface ModApi {
   defineRole(d: RoleDef): void;
   defineAction(d: ActionDef): void;
   defineTimer(d: TimerDef): void;
+  defineMonster(d: MonsterDef): void;
+  defineBrain(d: BrainDef): void;
   on<K extends keyof Hooks>(hook: K, fn: Hooks[K], opts?: { priority?: number }): void;
 }
 
@@ -199,7 +232,8 @@ interface Hooks {
   beforeAction(ctx: Ctx, a: PlayerAction): 'continue' | 'cancel';
   afterAction(ctx: Ctx, a: PlayerAction): void;
   endOfTurn(ctx: Ctx): void;
-  newLevel(ctx: Ctx, level: Level): void;
+  newGame(ctx: Ctx, hero: EntityId): void; // once, before the first level exists
+  newLevel(ctx: Ctx, level: Level): void; // when a level is first generated
 }
 
 interface TimerDef {
@@ -215,8 +249,16 @@ interface Ctx {
   defs: Registry;
   emit(e: GameEvent): void;
   query: CoreQuery;
+  spawn(e: Omit<Entity, 'id'>): EntityId;
+  remove(id: EntityId): void; // never the hero
+  goToLevel(depth: number, at: 'up' | 'down'): void; // generates dlvl<N> on first visit; arrive on that staircase
+  ask(prompt: Prompt, handler: DefId, data: Json): void;
+  interrupt(): void; // stop a multi-turn action
+  endGame(over: GameOver): void;
 }
 ```
+
+Inside `offer()` and queries, every mutating `Ctx` member throws, and so do `rng` and `emit`.
 
 - Hooks run in a fixed order: priority descending, then mod load order, then registration order.
 - The loader validates every definition and fails loudly with `ModLoadError { modId, defId?, path, reason }`. It rejects:
@@ -226,7 +268,7 @@ interface Ctx {
   - unknown or cyclic `dependsOn`
   - unknown hook names
   - malformed fields
-- **Vanilla gets no special access.** `@nh/content` exports `vanillaMod` (id `nh`), which registers terrain, the stub role, and the move, wait and search actions through `ModApi`.
+- **Vanilla gets no special access.** `@nh/content` exports `vanillaMod` (id `nh`), which registers terrain, the stub role, monsters, their brain, actions and its hooks (hero stats, regeneration, generation) through `ModApi`.
 - Game mods are recorded in saves as `ModRef[]`. Loading a save with a different mod list fails with a clear error.
 
 ## Queries
@@ -299,6 +341,8 @@ interface Renderer {
 ```
 
 Renderers draw only the cells inside the camera. The camera follows the player with a dead zone, so levels of any size scroll.
+
+`status` always has `dlvl` and `turn`. When the hero has the matching components it also has `hp`, `hpmax`, `ac`, `xl`, `xp` and `str`/`int`/`wis`/`dex`/`con`/`cha`. After the game ends it adds `dead` (`'died' | 'escaped'`), `killer`, `endTurn`, `endDepth` and `endLevel`. The legend covers terrain, roles and monsters.
 
 ## Client mods
 

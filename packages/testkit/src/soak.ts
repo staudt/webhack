@@ -34,6 +34,8 @@ export interface SoakResult {
   cellsExplored: number;
   /** The actions taken, so a failure can be replayed. */
   log: PlayerAction[];
+  /** How the run ended: still playing at the turn limit, or the game ended. */
+  outcome: 'playing' | 'died' | 'escaped';
 }
 
 const NEIGHBOURS = [-1, 0, 1].flatMap((dy) => [-1, 0, 1].map((dx) => ({ dx, dy }))).filter((d) => d.dx || d.dy);
@@ -58,7 +60,15 @@ export function soak(mods: readonly Mod[], opts: SoakOptions): SoakResult {
   };
   check(null);
 
-  while (!violations && state.turn < opts.turns && log.length < maxActions) {
+  while (!violations && !state.gameOver && state.turn < opts.turns && log.length < maxActions) {
+    // The bot always declines prompts (e.g. leaving the dungeon) so runs keep going.
+    const pending = state.pendingPrompt;
+    if (pending) {
+      const answer: PlayerAction = { type: 'answer', promptId: pending.prompt.id, value: false };
+      log.push(answer);
+      engine.step(state, answer);
+      continue;
+    }
     const q = engine.query(state);
     const pos = getPlayer(state).c.pos;
     if (!pos) throw new Error('player has no pos');
@@ -82,6 +92,7 @@ export function soak(mods: readonly Mod[], opts: SoakOptions): SoakResult {
     violations,
     cellsExplored: mem.filter((m) => m >= 0).length,
     log,
+    outcome: state.gameOver?.kind ?? 'playing',
   };
   const v = result.violations as SoakViolation | null;
   if (v && !opts.collect) {

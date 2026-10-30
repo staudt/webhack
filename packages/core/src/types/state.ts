@@ -11,9 +11,25 @@ export interface Timer {
   data: Json;
 }
 
+export interface GameOver {
+  kind: 'died' | 'escaped';
+  /** Message param for the cause: a key, or '@' + a def id (e.g. '@nh:newt'). */
+  killer: string;
+  turn: number;
+  depth: number;
+  level: number;
+}
+
+/** A question awaiting the player's `{ type: 'answer' }`; `handler` is the ActionDef whose `answer` runs. */
+export interface PendingPrompt {
+  prompt: Prompt;
+  handler: DefId;
+  data: Json;
+}
+
 /** The whole game. JSON-plain: no classes, Map, Set, functions or typed arrays. */
 export interface GameState {
-  version: 1;
+  version: 2;
   seed: number;
   turn: number;
   nextEntityId: number;
@@ -35,6 +51,9 @@ export interface GameState {
   timers: Timer[];
   /** Per-mod persistent data, keyed by mod id. */
   modData: Record<string, Json>;
+  /** Set when the game has ended; every further action is rejected. */
+  gameOver: GameOver | null;
+  pendingPrompt: PendingPrompt | null;
 }
 
 export interface StepResult {

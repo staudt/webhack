@@ -4,7 +4,7 @@ import type { Replay, SaveFile } from './types/protocol';
 import type { GameState } from './types/state';
 
 export const SAVE_FORMAT = 'nh-ts';
-export const SAVE_VERSION = 1;
+export const SAVE_VERSION = 2 as const;
 
 export function serializeSave(state: GameState, replay: Replay): string {
   const file: SaveFile = { format: SAVE_FORMAT, version: SAVE_VERSION, mods: state.mods, state, replay };
