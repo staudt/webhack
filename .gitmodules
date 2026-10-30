@@ -1,0 +1,4 @@
+[submodule "vendor/nethack"]
+	path = vendor/nethack
+	url = https://github.com/NetHack/NetHack.git
+	shallow = true
