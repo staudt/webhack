@@ -36,6 +36,21 @@ function dirTo(from: Pos, to: Pos): Dir | null {
   return DIR_LIST.find((d) => DIRS[d].x === dx && DIRS[d].y === dy) ?? null;
 }
 
+/**
+ * Turns the closed door at `at` into the open door matching its wall orientation: a door in a
+ * vertical wall has rock/wall to its north and south.
+ * ref: src/lock.c doopen_indir(), src/monmove.c postmov() (D_ISOPEN)
+ */
+export function openDoorAt(ctx: Ctx, level: Level, at: Pos): void {
+  const passableAt = (x: number, y: number): boolean => {
+    if (!inBounds(level, x, y)) return false;
+    const id = level.palette[level.cells[cellIndex(level, x, y)] ?? 0];
+    return id !== undefined && ctx.defs.terrain(id).passable;
+  };
+  const vertical = !passableAt(at.x, at.y - 1) && !passableAt(at.x, at.y + 1);
+  setTerrain(level, at.x, at.y, vertical ? T.door_open_v : T.door_open_h);
+}
+
 const move: ActionDef = {
   id: 'nh:move',
   labelKey: 'action.move',
@@ -47,9 +62,7 @@ const move: ActionDef = {
     if (!dir) return [];
     const level = getLevel(ctx.state);
     // A visible monster there turns the move into an attack (allowed diagonally through doors).
-    const seen = ctx.query
-      .describe(target.pos)
-      .entities.find((e) => ctx.defs.isMonster(e.def));
+    const seen = ctx.query.describe(target.pos).entities.find((e) => ctx.defs.isMonster(e.def));
     if (seen)
       return [
         {
@@ -92,17 +105,7 @@ const move: ActionDef = {
     switch (check.reason) {
       case 'closedDoor': {
         // ref: src/hack.c test_move() flags.autoopen -> src/lock.c doopen_indir()
-        // A door in a vertical wall has rock/wall to its north and south.
-        const passableAt = (x: number, y: number): boolean => {
-          if (!inBounds(level, x, y)) return false;
-          const id = level.palette[level.cells[cellIndex(level, x, y)] ?? 0];
-          return id !== undefined && ctx.defs.terrain(id).passable;
-        };
-        const vertical = !passableAt(to.x, to.y - 1) && !passableAt(to.x, to.y + 1);
-        const open = vertical ? T.door_open_v : T.door_open_h;
-        let pi = level.palette.indexOf(open);
-        if (pi === -1) pi = level.palette.push(open) - 1;
-        level.cells[cellIndex(level, to.x, to.y)] = pi;
+        openDoorAt(ctx, level, to);
         ctx.emit({ type: 'doorOpened', pos: to });
         ctx.emit({ type: 'msg', key: 'door.opens' });
         return NORMAL_SPEED;
@@ -125,9 +128,7 @@ const wait: ActionDef = {
   labelKey: 'action.wait',
   handles: 'wait',
   offer: (_ctx, target) =>
-    target.kind === 'self'
-      ? [{ action: { type: 'wait' }, labelKey: 'action.wait' }]
-      : [],
+    target.kind === 'self' ? [{ action: { type: 'wait' }, labelKey: 'action.wait' }] : [],
   // ref: src/cmd.c donull()
   perform: () => NORMAL_SPEED,
 };
@@ -153,9 +154,7 @@ const search: ActionDef = {
   labelKey: 'action.search',
   handles: 'search',
   offer: (_ctx, target) =>
-    target.kind === 'self'
-      ? [{ action: { type: 'search' }, labelKey: 'action.search' }]
-      : [],
+    target.kind === 'self' ? [{ action: { type: 'search' }, labelKey: 'action.search' }] : [],
   perform(ctx) {
     // ref: src/detect.c dosearch0(): x outer, y inner over the 3x3 around the hero. Hidden monsters
     // and traps are not implemented; there is no Luck or lenses/artifact bonus (fund = 0, Luck = 0).

@@ -1,4 +1,12 @@
-import { cellIndex, inBounds, isJsonPlain, sortedIds, stateHash, type GameState, type Registry } from '@nh/core';
+import {
+  cellIndex,
+  inBounds,
+  isJsonPlain,
+  sortedIds,
+  stateHash,
+  type GameState,
+  type Registry,
+} from '@nh/core';
 
 /** Returns a list of violated invariants; empty means the state is healthy. */
 export function checkInvariants(state: GameState, registry: Registry): string[] {
@@ -19,7 +27,8 @@ export function checkInvariants(state: GameState, registry: Registry): string[] 
       }
     }
     for (const id of lv.palette) {
-      if (!registry.hasTerrain(id)) errs.push(`level ${lid}: palette terrain '${id}' is not registered`);
+      if (!registry.hasTerrain(id))
+        errs.push(`level ${lid}: palette terrain '${id}' is not registered`);
     }
     const mem = state.memory[lid];
     if (mem) {
@@ -40,6 +49,21 @@ export function checkInvariants(state: GameState, registry: Registry): string[] 
     const e = state.entities[String(id)];
     if (!e) continue;
     if (e.id !== id) errs.push(`entity key ${id} has id ${e.id}`);
+    if (e.c.hp) {
+      const { cur, max } = e.c.hp;
+      const heroDead = id === state.playerId && state.gameOver !== null;
+      if (!Number.isInteger(cur) || !Number.isInteger(max) || max < 1) {
+        errs.push(`entity ${id}: bad hp ${cur}/${max}`);
+      } else if (cur > max || (cur <= 0 && !heroDead)) {
+        errs.push(`entity ${id} (${e.def}): hp ${cur}/${max} out of range`);
+      }
+    }
+    if (e.c.monster && !registry.isMonster(e.def))
+      errs.push(`entity ${id}: def '${e.def}' is not a registered monster`);
+    if (e.c.actor && !Number.isFinite(e.c.actor.energy))
+      errs.push(`entity ${id}: energy ${e.c.actor.energy} is not finite`);
+    else if (e.c.actor && !Number.isInteger(e.c.actor.energy))
+      errs.push(`entity ${id}: energy ${e.c.actor.energy} is not an integer`);
     const p = e.c.pos;
     if (!p) continue;
     const lv = state.levels[p.level];
@@ -69,6 +93,12 @@ export function checkInvariants(state: GameState, registry: Registry): string[] 
     else if (player.c.pos.level !== state.currentLevel) {
       errs.push(`player on '${player.c.pos.level}' but currentLevel is '${state.currentLevel}'`);
     }
+  }
+
+  if (state.pendingPrompt && state.gameOver) errs.push('pendingPrompt and gameOver are both set');
+  const heroPos = player?.c.pos;
+  if (heroPos && state.levels[state.currentLevel] && heroPos.level !== state.currentLevel) {
+    errs.push(`hero level '${heroPos.level}' != currentLevel '${state.currentLevel}'`);
   }
 
   const cur = state.levels[state.currentLevel];

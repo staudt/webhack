@@ -1,12 +1,14 @@
 import type { BrainDef } from '@nh/core';
+import { dochug, mcalcmove } from './monmove';
 
-// Placeholder brain for every vanilla monster. The real dochug/m_move port (ref: src/monmove.c,
-// src/monmove.c dochug()) arrives in a later step; until then monsters take no actions.
+// ref: src/monmove.c dochug(), m_move(); src/mon.c mcalcmove()
 export const BRAINS: readonly BrainDef[] = [
   {
     id: 'nh:melee',
-    act() {
-      /* filled in by the monster AI step */
+    act: dochug,
+    movement(ctx, self) {
+      const a = ctx.state.entities[String(self)]?.c.actor;
+      return mcalcmove(ctx.rng, a?.speed ?? 12);
     },
   },
 ];

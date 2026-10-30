@@ -93,7 +93,11 @@ describe('stairs', () => {
     const { engine, state, pos } = start();
     const before = pos(state);
     const res = engine.step(state, UP);
-    expect(res.prompt).toMatchObject({ id: 'leave-dungeon', kind: 'yn', key: 'stairs.leave_confirm' });
+    expect(res.prompt).toMatchObject({
+      id: 'leave-dungeon',
+      kind: 'yn',
+      key: 'stairs.leave_confirm',
+    });
     expect(state.pendingPrompt).not.toBeNull();
     const turn = state.turn;
     const after = engine.step(state, { type: 'answer', promptId: 'leave-dungeon', value: false });
@@ -109,7 +113,12 @@ describe('stairs', () => {
     const { engine, state } = start();
     engine.step(state, UP);
     engine.step(state, { type: 'answer', promptId: 'leave-dungeon', value: true });
-    expect(state.gameOver).toMatchObject({ kind: 'escaped', killer: 'escaped', depth: 1, level: 1 });
+    expect(state.gameOver).toMatchObject({
+      kind: 'escaped',
+      killer: 'escaped',
+      depth: 1,
+      level: 1,
+    });
     expect(() => engine.step(state, { type: 'wait' })).toThrow();
   });
 

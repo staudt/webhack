@@ -1,4 +1,13 @@
-import { DIRS, DIR_LIST, getPlayer, type ActionDef, type Ctx, type Dir, type PlayerAction, type Pos } from '@nh/core';
+import {
+  DIRS,
+  DIR_LIST,
+  getPlayer,
+  type ActionDef,
+  type Ctx,
+  type Dir,
+  type PlayerAction,
+  type Pos,
+} from '@nh/core';
 
 function heroPos(ctx: Ctx): Pos {
   const pos = getPlayer(ctx.state).c.pos;
@@ -45,7 +54,9 @@ const travel: ActionDef = {
     if (Math.max(Math.abs(x - here.x), Math.abs(y - here.y)) <= 1) return []; // own or adjacent cell
     if (!ctx.query.describe(target.pos).remembered) return [];
     if (!ctx.query.pathTo(target.pos)) return [];
-    return [{ action: { type: 'mod', action: 'nh:travel', args: { x, y } }, labelKey: 'action.travel' }];
+    return [
+      { action: { type: 'mod', action: 'nh:travel', args: { x, y } }, labelKey: 'action.travel' },
+    ];
   },
   perform(ctx, action) {
     const target = targetOf(action);

@@ -236,6 +236,7 @@ describe('HP regeneration', () => {
     }
     const turns = 1000;
     for (let i = 0; i < turns; i++) {
+      for (const id of Object.keys(s.entities)) if (Number(id) !== s.playerId) delete s.entities[id];
       const before = hero.c.hp?.cur ?? 0;
       engine.step(s, { type: 'wait' });
       const after = hero.c.hp?.cur ?? 0;

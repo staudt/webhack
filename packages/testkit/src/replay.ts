@@ -20,7 +20,9 @@ export function runReplay(mods: readonly Mod[], replay: Replay): ReplayResult {
   const have = engine.registry.mods.map((m) => `${m.id}@${m.version}`);
   const want = replay.mods.map((m) => `${m.id}@${m.version}`);
   if (have.join(',') !== want.join(',')) {
-    throw new Error(`Replay mod mismatch: replay has [${want.join(', ')}], engine has [${have.join(', ')}]`);
+    throw new Error(
+      `Replay mod mismatch: replay has [${want.join(', ')}], engine has [${have.join(', ')}]`,
+    );
   }
   const first = engine.newGame({ seed: replay.seed, width: replay.width, height: replay.height });
   const state = first.state;

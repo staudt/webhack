@@ -26,7 +26,10 @@ const CHARS: Record<string, DefId> = {
 };
 
 /** Builds a level from ASCII rows (all lit). '@' marks the player's start (floor). */
-function setup(rows: string[]): { state: GameState; step: (a: Parameters<Engine['step']>[1]) => GameEvent[] } {
+function setup(rows: string[]): {
+  state: GameState;
+  step: (a: Parameters<Engine['step']>[1]) => GameEvent[];
+} {
   const engine = createEngine([vanillaMod]);
   const { state } = engine.newGame({ seed: 1 });
   const height = rows.length;
@@ -85,7 +88,12 @@ describe('nh:move', () => {
     const turn = state.turn;
     const ev = step({ type: 'move', dir: 'e' });
     expect(posOf(state)).toEqual({ x: 2, y: 1 });
-    expect(ev).toContainEqual({ type: 'moved', id: state.playerId, from: { x: 1, y: 1 }, to: { x: 2, y: 1 } });
+    expect(ev).toContainEqual({
+      type: 'moved',
+      id: state.playerId,
+      from: { x: 1, y: 1 },
+      to: { x: 2, y: 1 },
+    });
     expect(state.turn).toBe(turn + 1);
   });
 
@@ -220,10 +228,27 @@ describe('offers', () => {
     const { q } = queryFor(['...', '.@.', '...']);
     const offered: Dir[] = [];
     for (const dir of DIR_LIST) {
-      const d = { n: [0, -1], ne: [1, -1], e: [1, 0], se: [1, 1], s: [0, 1], sw: [-1, 1], w: [-1, 0], nw: [-1, -1] }[dir];
-      const offers = q.actionsFor({ kind: 'cell', pos: { x: 1 + (d?.[0] ?? 0), y: 1 + (d?.[1] ?? 0) } });
+      const d = {
+        n: [0, -1],
+        ne: [1, -1],
+        e: [1, 0],
+        se: [1, 1],
+        s: [0, 1],
+        sw: [-1, 1],
+        w: [-1, 0],
+        nw: [-1, -1],
+      }[dir];
+      const offers = q.actionsFor({
+        kind: 'cell',
+        pos: { x: 1 + (d?.[0] ?? 0), y: 1 + (d?.[1] ?? 0) },
+      });
       expect(offers).toEqual([
-        { action: { type: 'move', dir }, labelKey: 'action.move', params: { dir: `@dir.${dir}` }, source: 'nh' },
+        {
+          action: { type: 'move', dir },
+          labelKey: 'action.move',
+          params: { dir: `@dir.${dir}` },
+          source: 'nh',
+        },
       ]);
       expect(messagesEn[`dir.${dir}`]).toBeDefined();
       offered.push(dir);

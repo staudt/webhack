@@ -6,6 +6,7 @@ import { registerHero } from './hero';
 import { ROLES } from './roles';
 import { TERRAIN } from './terrain';
 import { TRAVEL_ACTIONS } from './travel';
+import { registerGeneration } from './generation';
 
 export const CONTENT_VERSION = 1;
 
@@ -20,6 +21,7 @@ export const vanillaMod: Mod = {
     for (const b of BRAINS) api.defineBrain(b);
     for (const m of MONSTERS) api.defineMonster(m);
     registerHero(api);
+    registerGeneration(api);
   },
 };
 
@@ -39,5 +41,14 @@ export {
   dbon,
   acValue,
 } from './combat';
-export { experienceFor, gainExperience, newuexp, newhp, MAXULEV, VALKYRIE_STARTING_GEAR } from './hero';
+export {
+  experienceFor,
+  gainExperience,
+  newuexp,
+  newhp,
+  MAXULEV,
+  VALKYRIE_STARTING_GEAR,
+} from './hero';
 export { messagesEn } from './messages.en';
+export { rndmonst, makemon, registerGeneration } from './generation';
+export { mcalcmove, clearPath, disturb, dochug, mfndpos } from './monmove';

@@ -6,7 +6,15 @@ import { randomActions } from './helpers/actions';
 const SEED = 20240607;
 const W = 80;
 const H = 21;
-const actions = randomActions(400, 99);
+const allActions = randomActions(400, 99);
+/** The random script may get the hero killed; only actions up to the game's end are applied. */
+const actions = (() => {
+  const engine = createEngine([vanillaMod]);
+  const { state } = engine.newGame({ seed: SEED, width: W, height: H });
+  let n = 0;
+  while (n < allActions.length && !state.gameOver) engine.step(state, allActions[n++] as never);
+  return allActions.slice(0, n);
+})();
 
 function directHash(): string {
   const engine = createEngine([vanillaMod]);
@@ -53,7 +61,7 @@ describe('determinism', () => {
     const expected = directHash();
     const host = workerHost();
     host.send({ t: 'new', seed: SEED, width: W, height: H });
-    const half = 173;
+    const half = Math.trunc(actions.length / 2);
     for (const action of actions.slice(0, half)) host.send({ t: 'act', action });
     const saved = host.send({ t: 'save' })[0];
     if (saved?.t !== 'saved') throw new Error('no save');

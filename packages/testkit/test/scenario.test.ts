@@ -4,13 +4,7 @@ import { createScenario, runScenario } from '../src/index';
 
 const scenario = createScenario([vanillaMod]);
 
-const ROOM = [
-  '-------',
-  '|.....|',
-  '|..@..|',
-  '|.....|',
-  '-------',
-];
+const ROOM = ['-------', '|.....|', '|..@..|', '|.....|', '-------'];
 
 scenario('walk in a lit room', (s) => {
   s.level(ROOM);
@@ -20,7 +14,10 @@ scenario('walk in a lit room', (s) => {
   s.expectPos({ x: 4, y: 2 });
   s.expectEvent({ type: 'moved', from: { x: 3, y: 2 }, to: { x: 4, y: 2 } });
   s.expectTurn(2);
-  s.act([{ type: 'move', dir: 'n' }, { type: 'move', dir: 'w' }]);
+  s.act([
+    { type: 'move', dir: 'n' },
+    { type: 'move', dir: 'w' },
+  ]);
   s.expectPos({ x: 3, y: 1 });
   s.expectTurn(4);
   s.check((state) => {

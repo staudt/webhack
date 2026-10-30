@@ -23,7 +23,8 @@ const CHARS: Record<string, DefId> = {
 function setup(rows: string[], opts: { forget?: Pos[] } = {}) {
   const engine = createEngine([vanillaMod]);
   const { state } = engine.newGame({ seed: 1 });
-  for (const id of Object.keys(state.entities)) if (Number(id) !== state.playerId) delete state.entities[id];
+  for (const id of Object.keys(state.entities))
+    if (Number(id) !== state.playerId) delete state.entities[id];
   const height = rows.length;
   const width = Math.max(...rows.map((r) => r.length));
   const palette: DefId[] = [T.stone, T.floor];
@@ -43,8 +44,16 @@ function setup(rows: string[], opts: { forget?: Pos[] } = {}) {
     }
   }
   const level: Level = {
-    id: 'dlvl1', depth: 1, width, height, palette, cells,
-    lit: cells.map(() => 1), rooms: [], up: null, down: null,
+    id: 'dlvl1',
+    depth: 1,
+    width,
+    height,
+    palette,
+    cells,
+    lit: cells.map(() => 1),
+    rooms: [],
+    up: null,
+    down: null,
   };
   state.levels['dlvl1'] = level;
   const memory = newMemory(level);
@@ -59,13 +68,22 @@ function setup(rows: string[], opts: { forget?: Pos[] } = {}) {
   return { engine, state, step };
 }
 
-const go = (x: number, y: number) => ({ type: 'mod' as const, action: 'nh:travel' as const, args: { x, y } });
+const go = (x: number, y: number) => ({
+  type: 'mod' as const,
+  action: 'nh:travel' as const,
+  args: { x, y },
+});
 const posOf = (s: GameState): Pos => {
   const p = getPlayer(s).c.pos;
   return { x: p?.x ?? -1, y: p?.y ?? -1 };
 };
 
-function addNewt(state: GameState, step: (a: { type: 'wait' }) => unknown, x: number, y: number): void {
+function addNewt(
+  state: GameState,
+  step: (a: { type: 'wait' }) => unknown,
+  x: number,
+  y: number,
+): void {
   const id = state.nextEntityId++;
   state.entities[String(id)] = {
     id,
@@ -102,7 +120,9 @@ describe('nh:travel', () => {
     const { engine, state } = setup(['@..|..', '...|..'], { forget: [{ x: 2, y: 1 }] });
     const q = engine.query(state);
     const offers = (x: number, y: number) =>
-      q.actionsFor({ kind: 'cell', pos: { x, y } }).filter((o) => o.action.type === 'mod' && o.action.action === 'nh:travel');
+      q
+        .actionsFor({ kind: 'cell', pos: { x, y } })
+        .filter((o) => o.action.type === 'mod' && o.action.action === 'nh:travel');
     expect(offers(0, 0)).toHaveLength(0);
     expect(offers(1, 1)).toHaveLength(0);
     expect(offers(2, 1)).toHaveLength(0); // unknown

@@ -7,6 +7,7 @@ import { T, vanillaMod } from '../src/index';
 function setup(seed: number, target: DefId, at = { x: 4, y: 2 }) {
   const engine = createEngine([vanillaMod]);
   const { state } = engine.newGame({ seed });
+  for (const id of Object.keys(state.entities)) if (Number(id) !== state.playerId) delete state.entities[id];
   const width = 9;
   const height = 5;
   const palette: DefId[] = [T.stone, T.floor, target];
@@ -39,7 +40,8 @@ function setup(seed: number, target: DefId, at = { x: 4, y: 2 }) {
 /** Searches until `done`, up to 200 times; returns every event emitted. */
 function searchUntil(s: ReturnType<typeof setup>, done: () => boolean) {
   const events = [];
-  for (let i = 0; i < 200 && !done(); i++) events.push(...s.engine.step(s.state, { type: 'search' }).events);
+  for (let i = 0; i < 200 && !done(); i++)
+    events.push(...s.engine.step(s.state, { type: 'search' }).events);
   return events;
 }
 
@@ -85,9 +87,17 @@ describe('nh:search', () => {
   });
 
   test('never finds anything that is not adjacent', () => {
-    for (const at of [{ x: 5, y: 2 }, { x: 4, y: 4 }, { x: 1, y: 0 }]) {
+    for (const at of [
+      { x: 5, y: 2 },
+      { x: 4, y: 4 },
+      { x: 1, y: 0 },
+    ]) {
       const s = setup(21, T.sdoor_v, at);
-      for (let i = 0; i < 150; i++) s.engine.step(s.state, { type: 'search' });
+      for (let i = 0; i < 150; i++) {
+        for (const id of Object.keys(s.state.entities))
+          if (Number(id) !== s.state.playerId) delete s.state.entities[id]; // random spawns
+        s.engine.step(s.state, { type: 'search' });
+      }
       expect(s.terrainAt(at.x, at.y)).toBe(T.sdoor_v);
     }
   });
@@ -104,6 +114,8 @@ describe('nh:search', () => {
     s.engine.step(s.state, { type: 'wait' });
     const d = s.engine.query(s.state).describe({ x: 4, y: 2 });
     expect(d.terrain).toBe(T.vwall);
-    expect(JSON.stringify(buildSnapshot(s.engine.registry, s.state).cells)).not.toMatch(/sdoor|scorr/);
+    expect(JSON.stringify(buildSnapshot(s.engine.registry, s.state).cells)).not.toMatch(
+      /sdoor|scorr/,
+    );
   });
 });
