@@ -11,6 +11,14 @@ padding-top:env(safe-area-inset-top);padding-left:env(safe-area-inset-left);padd
 .nh-log-history{position:absolute;left:0;right:0;top:0;max-height:60dvh;overflow-y:auto;background:var(--nh-panel);border-bottom:2px solid var(--nh-accent);padding:4px 8px;z-index:5}
 .nh-log-title{font-weight:bold;color:var(--nh-accent)}
 .nh-map{flex:1;min-height:0;position:relative;overflow:hidden;touch-action:none}
+.nh-status{flex:none;padding:4px 8px;background:var(--nh-panel);border-top:1px solid var(--nh-border);font-family:ui-monospace,Menlo,Consolas,monospace;font-size:13px;line-height:1.3}
+.nh-status:empty{display:none}
+.nh-status-line{display:flex;flex-wrap:wrap;column-gap:.8em}
+.nh-hp-warn{color:#e5c100}
+.nh-hp-crit{color:#ff4d4d}
+.nh-sheet-body{margin:0;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;line-height:1.15;white-space:pre;overflow-x:auto;color:var(--nh-fg)}
+.nh-modal.nh-tomb{align-items:center}
+.nh-tomb .nh-sheet{border-radius:12px;width:auto;max-width:calc(100% - 16px)}
 .nh-bar{flex:none;display:flex;gap:8px;padding:8px;background:var(--nh-panel);border-top:1px solid var(--nh-border)}
 .nh-btn{min-width:44px;min-height:44px;padding:8px 14px;font-size:16px;color:var(--nh-fg);background:#232833;border:1px solid var(--nh-border);border-radius:8px;cursor:pointer}
 .nh-bar .nh-btn{flex:1}

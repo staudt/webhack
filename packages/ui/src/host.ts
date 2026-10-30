@@ -23,6 +23,7 @@ import { Keymap } from './keymap';
 import { openMenu, type MenuEntry, type OpenMenu } from './menu';
 import { createMessageLog } from './messageLog';
 import { injectStyles } from './styles';
+import { an, ripArt, statusLines } from './status';
 
 export interface GameClient {
   act(action: PlayerAction): void;
@@ -37,6 +38,8 @@ export interface UiOptions {
   locale?: string;
   /** Window for chording two arrow keys into a diagonal; 0 disables. Default 100. */
   chordWindowMs?: number;
+  /** Called by the tombstone's New game button; falls back to the menu item with id 'new'. */
+  onNewGame?: () => void;
 }
 
 export interface Ui {
@@ -119,6 +122,60 @@ export function createUi(opts: UiOptions): Ui {
   const offerEntries = (offers: ActionOffer[]): MenuEntry[] =>
     offers.map((o) => ({ label: t(o.labelKey, o.params), run: () => game.act(o.action) }));
 
+  const renderStatus = (s: ViewUpdate['status']): void => {
+    const lines = statusLines(s).map((fields) => {
+      const div = doc.createElement('div');
+      div.className = 'nh-status-line';
+      for (const f of fields) {
+        const span = doc.createElement('span');
+        span.textContent = f.text;
+        if (f.cls) span.className = f.cls;
+        div.append(span);
+      }
+      return div;
+    });
+    layout.status.replaceChildren(...lines.filter((l) => l.childElementCount > 0));
+  };
+
+  let tombstone = false;
+  const newGame = (): void => {
+    if (opts.onNewGame) opts.onNewGame();
+    else menuItems.find((m) => m.id === 'new')?.run();
+  };
+  const showTombstone = (s: ViewUpdate['status']): void => {
+    tombstone = true;
+    const died = s['dead'] === 'died';
+    const facts = [
+      t('ui.rip.turn', { turn: Number(s['endTurn'] ?? s['turn'] ?? 0) }),
+      t('ui.rip.dlvl', { dlvl: Number(s['endDepth'] ?? s['dlvl'] ?? 1) }),
+      t('ui.rip.xl', { xl: Number(s['endLevel'] ?? s['xl'] ?? 1) }),
+    ];
+    let title: string;
+    let body: string;
+    if (died) {
+      const k = String(s['killer'] ?? '');
+      const def = k.startsWith('@') ? k.slice(1) : k;
+      const killer = def ? an(t(def)) : '';
+      const lines = [
+        t('ui.rip.rest'),
+        ...(killer ? [t('ui.rip.killed_by', { killer })] : []),
+        ...facts,
+      ];
+      title = t('ui.rip.title');
+      body = ripArt(lines);
+    } else {
+      title = t('ui.escaped');
+      body = facts.join('\n');
+    }
+    const m = showModal(title, [{ label: t('ui.newgame'), run: newGame }], false);
+    m.el.classList.add('nh-tomb');
+    m.el
+      .querySelector('.nh-sheet-title')
+      ?.after(
+        Object.assign(doc.createElement('pre'), { className: 'nh-sheet-body', textContent: body }),
+      );
+  };
+
   const setLook = (on: boolean): void => {
     lookMode = on;
     layout.lookBtn.setAttribute('aria-pressed', String(on));
@@ -165,7 +222,7 @@ export function createUi(opts: UiOptions): Ui {
     const dist = p ? Math.max(Math.abs(pos.x - p.x), Math.abs(pos.y - p.y)) : Infinity;
     if (!wasLook && dist === 0) {
       openActions({ kind: 'self' });
-    } else if (wasLook || dist !== 1) {
+    } else if (wasLook) {
       describe(pos);
     } else {
       void game.query.actionsFor({ kind: 'cell', pos }).then((offers) => {
@@ -252,10 +309,19 @@ export function createUi(opts: UiOptions): Ui {
     update(view, events, prompt) {
       if (destroyed) return;
       renderer.apply(view);
+      renderStatus(view.status);
       playerPos = { x: view.player.x, y: view.player.y };
       for (const ev of events) {
         if (ev.type === 'msg') log.push(t(ev.key, ev.params));
         for (const fn of eventHandlers) fn(ev);
+      }
+      if (view.status['dead'] !== undefined) {
+        if (!tombstone) showTombstone(view.status);
+        return;
+      }
+      if (tombstone) {
+        tombstone = false;
+        closeModal();
       }
       if (prompt) {
         if (promptId !== prompt.id) showPrompt(prompt);

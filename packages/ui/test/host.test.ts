@@ -13,7 +13,15 @@ import type {
   Renderer,
   ViewUpdate,
 } from '@nh/core';
-import { createUi, defaultKeymap, uiMessagesEn, type GameClient, type Ui } from '../src/index';
+import {
+  createUi,
+  defaultKeymap,
+  formatStr,
+  hpLevel,
+  uiMessagesEn,
+  type GameClient,
+  type Ui,
+} from '../src/index';
 
 class FakeRenderer implements Renderer {
   mounted: object | null = null;
@@ -208,6 +216,7 @@ describe('host', () => {
       entities: [{ id: 2, def: 'nh:newt' }],
     };
     m.renderer.cell = { x: 9, y: 9 };
+    m.state.offers = [];
     tap(m.root.querySelector('.nh-map')!);
     await flush();
     expect(logText(m.root).at(-1)).toBe('You see: newt, floor.');
@@ -318,5 +327,133 @@ describe('host', () => {
     expect(m.renderer.destroyed).toBe(true);
     key('k', 'KeyK');
     expect(m.acts).toEqual([]);
+  });
+});
+
+describe('status bar, tombstone, tap to act', () => {
+  const st = (status: Record<string, string | number>): ViewUpdate => ({ ...view(), status });
+  const lines = (root: Element) =>
+    [...root.querySelectorAll('.nh-status-line')].map((e) => e.textContent);
+
+  test('Str formatting', () => {
+    const cases: [number, string][] = [
+      [3, '3'],
+      [18, '18'],
+      [19, '18/01'],
+      [68, '18/50'],
+      [117, '18/99'],
+      [118, '18/**'],
+      [119, '19'],
+      [125, '25'],
+    ];
+    for (const [n, s] of cases) expect(formatStr(n)).toBe(s);
+  });
+
+  test('status bar renders snapshot and delta', () => {
+    const m = mk();
+    ui = m.ui;
+    m.ui.update(
+      st({
+        str: 68,
+        dex: 14,
+        con: 18,
+        int: 7,
+        wis: 9,
+        cha: 7,
+        dlvl: 1,
+        hp: 16,
+        hpmax: 16,
+        ac: 6,
+        xl: 1,
+        xp: 0,
+        turn: 123,
+      }),
+      [],
+      null,
+    );
+    expect(lines(m.root)).toEqual([
+      'St:18/50Dx:14Co:18In:7Wi:9Ch:7',
+      'Dlvl:1HP:16(16)AC:6Xp:1/0T:123',
+    ]);
+    m.ui.update(st({ dlvl: 2, turn: 124 }), [], null);
+    expect(lines(m.root)).toEqual(['Dlvl:2T:124']);
+  });
+
+  test('HP colors', () => {
+    expect(hpLevel(16, 16)).toBe('ok');
+    expect(hpLevel(10, 30)).toBe('ok');
+    expect(hpLevel(9, 30)).toBe('warn');
+    expect(hpLevel(5, 100)).toBe('crit');
+    expect(hpLevel(2, 20)).toBe('crit');
+    const m = mk();
+    ui = m.ui;
+    m.ui.update(st({ hp: 3, hpmax: 30 }), [], null);
+    expect(m.root.querySelector('.nh-hp-crit')?.textContent).toBe('HP:3(30)');
+  });
+
+  test.each([
+    ['nh:jackal', 'killed by a jackal'],
+    ['@nh:iguana', 'killed by an iguana'],
+  ])('tombstone for %s', (killer, text) => {
+    const onNewGame = vi.fn();
+    const root = document.createElement('div');
+    document.body.append(root);
+    const g = fakeGame();
+    ui = createUi({
+      root,
+      renderer: new FakeRenderer(),
+      game: g.game,
+      mods: [defaultKeymap],
+      onNewGame,
+    });
+    ui.api.addMessages('en', { 'nh:jackal': 'jackal', 'nh:iguana': 'iguana' });
+    ui.update(
+      st({ dead: 'died', killer, endTurn: 77, endDepth: 3, endLevel: 2, turn: 77, dlvl: 3 }),
+      [],
+      null,
+    );
+    const body = root.querySelector('.nh-sheet-body')?.textContent ?? '';
+    expect(body).toContain(text);
+    expect(body).toContain('on turn 77');
+    expect(root.querySelector('.nh-cancel')).toBeNull();
+    key('Escape');
+    expect(root.querySelector('.nh-sheet')).not.toBeNull();
+    ui.update(st({ dead: 'died', killer, turn: 77 }), [], null);
+    expect(root.querySelectorAll('.nh-sheet').length).toBe(1);
+    btns(root)[0]?.click();
+    expect(onNewGame).toHaveBeenCalledOnce();
+  });
+
+  test('escaped summary; Enter starts new game', () => {
+    const onNewGame = vi.fn();
+    const root = document.createElement('div');
+    document.body.append(root);
+    ui = createUi({
+      root,
+      renderer: new FakeRenderer(),
+      game: fakeGame().game,
+      mods: [],
+      onNewGame,
+    });
+    ui.update(st({ dead: 'escaped', turn: 9 }), [], null);
+    expect(root.querySelector('.nh-sheet-title')?.textContent).toBe('You escaped the dungeon.');
+    key('Enter');
+    expect(onNewGame).toHaveBeenCalledOnce();
+  });
+
+  test('tap on a distant cell: one offer acts, none describes', async () => {
+    const m = mk();
+    ui = m.ui;
+    m.ui.update(view(5, 5), [], null);
+    m.renderer.cell = { x: 20, y: 5 };
+    m.state.offers = [offer('e', 'Travel')];
+    tap(m.root.querySelector('.nh-map') as Element);
+    await flush();
+    expect(m.acts).toEqual([{ type: 'move', dir: 'e' }]);
+    expect(m.state.describeCalls).toEqual([]);
+    m.state.offers = [];
+    tap(m.root.querySelector('.nh-map') as Element);
+    await flush();
+    expect(m.state.describeCalls).toEqual([{ x: 20, y: 5 }]);
   });
 });

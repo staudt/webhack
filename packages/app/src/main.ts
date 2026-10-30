@@ -2,6 +2,7 @@ import type { ClientMod, PlayerAction } from '@nh/core';
 import { messagesEn } from '@nh/content';
 import { createAsciiRenderer } from '@nh/render-ascii';
 import { createUi, defaultKeymap } from '@nh/ui';
+import { vanillaKeys } from './keys';
 import { parseParams } from './params';
 import { createRemote, type Remote } from './remote';
 import { clearSave, loadSave, writeSave } from './storage';
@@ -20,6 +21,21 @@ const remote: Remote = createRemote({
 let size = { w: params.width, h: params.height };
 let started = false;
 let acts = 0;
+let dead = false;
+let loading = false;
+
+function startNew(): void {
+  dead = false;
+  loading = false;
+  acts = 0;
+  started = true;
+  remote.newGame(randomSeed(), size.w, size.h);
+}
+
+function loadText(text: string): void {
+  loading = true;
+  remote.load(text);
+}
 
 // Count acts so we can autosave without blocking the UI.
 const rawAct = remote.act.bind(remote);
@@ -29,7 +45,7 @@ remote.act = (action: PlayerAction) => {
 };
 
 async function saveNow(): Promise<boolean> {
-  if (!started) return false;
+  if (!started || dead) return false;
   try {
     await writeSave(await remote.save());
     return true;
@@ -46,11 +62,7 @@ const appMenuMod: ClientMod = {
       id: 'app.new',
       labelKey: 'ui.newgame',
       run: () => {
-        void clearSave().then(() => {
-          acts = 0;
-          started = true;
-          remote.newGame(randomSeed(), size.w, size.h);
-        });
+        void clearSave().then(startNew);
       },
     });
     api.addMenuItem({
@@ -69,8 +81,7 @@ const appMenuMod: ClientMod = {
         void loadSave().then((text) => {
           if (text === null) ui.notify('ui.nosave');
           else {
-            remote.load(text);
-            ui.notify('ui.loaded');
+            loadText(text);
           }
         });
       },
@@ -85,15 +96,33 @@ const ui = createUi({
   root,
   renderer: createAsciiRenderer(),
   game: remote,
-  mods: [defaultKeymap, appMenuMod],
+  mods: [defaultKeymap, vanillaKeys, appMenuMod],
+  onNewGame: () => void clearSave().then(startNew),
 });
 ui.api.addMessages('en', messagesEn);
 
 remote.onView((m) => {
+  if (loading) {
+    loading = false;
+    ui.notify('ui.loaded');
+  }
+  if (m.view.status['dead'] !== undefined && !dead) {
+    // NetHack deletes the save on death; stop autosaving.
+    dead = true;
+    void clearSave();
+  }
   if (m.view.kind === 'full') size = { w: m.view.width, h: m.view.height };
   ui.update(m.view, m.events, m.prompt);
 });
-remote.onError((e) => ui.notify('ui.error', { message: e }));
+remote.onError((e) => {
+  if (loading) {
+    // The save could not be restored (e.g. an older save version).
+    ui.notify('ui.save_incompatible');
+    void clearSave().then(startNew);
+    return;
+  }
+  ui.notify('ui.error', { message: e });
+});
 
 const flush = (): void => void saveNow();
 document.addEventListener('visibilitychange', () => {
@@ -106,8 +135,7 @@ async function boot(): Promise<void> {
     const text = await loadSave();
     if (text !== null) {
       started = true;
-      remote.load(text);
-      ui.notify('ui.loaded');
+      loadText(text);
       return;
     }
   }

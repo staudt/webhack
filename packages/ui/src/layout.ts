@@ -1,6 +1,7 @@
 export interface Layout {
   log: HTMLElement;
   map: HTMLElement;
+  status: HTMLElement;
   bar: HTMLElement;
   menuBtn: HTMLButtonElement;
   actionsBtn: HTMLButtonElement;
@@ -12,6 +13,8 @@ export function buildLayout(root: HTMLElement, log: HTMLElement): Layout {
   root.classList.add('nh-ui');
   const map = doc.createElement('div');
   map.className = 'nh-map';
+  const status = doc.createElement('div');
+  status.className = 'nh-status';
   const bar = doc.createElement('div');
   bar.className = 'nh-bar';
   const mk = (cls: string): HTMLButtonElement => {
@@ -25,6 +28,6 @@ export function buildLayout(root: HTMLElement, log: HTMLElement): Layout {
   const lookBtn = mk('nh-look-btn');
   lookBtn.setAttribute('aria-pressed', 'false');
   bar.append(menuBtn, actionsBtn, lookBtn);
-  root.append(log, map, bar);
-  return { log, map, bar, menuBtn, actionsBtn, lookBtn };
+  root.append(log, map, status, bar);
+  return { log, map, status, bar, menuBtn, actionsBtn, lookBtn };
 }
