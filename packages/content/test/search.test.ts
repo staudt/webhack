@@ -7,7 +7,12 @@ import { T, vanillaMod } from '../src/index';
 function setup(seed: number, target: DefId, at = { x: 4, y: 2 }) {
   const engine = createEngine([vanillaMod]);
   const { state } = engine.newGame({ seed });
-  for (const id of Object.keys(state.entities)) if (Number(id) !== state.playerId) delete state.entities[id];
+  for (const id of Object.keys(state.entities))
+    if (Number(id) !== state.playerId) delete state.entities[id];
+  // Random spawns during hundreds of searches must not end the game (the RNG stream shifts whenever
+  // game setup draws numbers, e.g. the appearance shuffle).
+  const hp = getPlayer(state).c.hp;
+  if (hp) Object.assign(hp, { cur: 500, max: 500 });
   const width = 9;
   const height = 5;
   const palette: DefId[] = [T.stone, T.floor, target];

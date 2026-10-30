@@ -268,4 +268,21 @@ export const objectMessagesEn: Record<string, string> = {
   'nh:scroll_labeled_xor_ota.plural': 'scrolls labeled XOR OTA',
   'nh:scroll_labeled_strc_prst_skrz_krk': 'scroll labeled STRC PRST SKRZ KRK',
   'nh:scroll_labeled_strc_prst_skrz_krk.plural': 'scrolls labeled STRC PRST SKRZ KRK',
+
+  // ---- item names (src/objnam.c doname): the template joins the pieces; each is '' or spaced ----
+  'obj.doname': '{count}{buc}{eaten}{spe}{name}{worn}',
+  'obj.count': '{n} ',
+  'obj.buc.cursed': 'cursed ',
+  'obj.buc.uncursed': 'uncursed ',
+  'obj.buc.blessed': 'blessed ',
+  'obj.eaten': 'partly eaten ',
+  'obj.worn': ' (being worn)',
+  'obj.wielded': ' (wielded)',
+  'obj.weapon_in_hand': ' (weapon in hand)',
+  'obj.weapon_in_hands': ' (weapon in hands)',
+  'obj.holy_water': 'potion of holy water',
+  'obj.holy_water.plural': 'potions of holy water',
+  'obj.unholy_water': 'potion of unholy water',
+  'obj.unholy_water.plural': 'potions of unholy water',
+  'item.compare': 'You learn more about your items by comparing them.',
 };
