@@ -11,5 +11,8 @@
   },
   "dependencies": {
     "@nh/core": "workspace:*"
+  },
+  "devDependencies": {
+    "happy-dom": "^21.0.4"
   }
 }
