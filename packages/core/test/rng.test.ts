@@ -1,6 +1,6 @@
 import fc from 'fast-check';
 import { describe, expect, test } from 'vitest';
-import { createRng, newRngStates, seedRng } from '../src/rng';
+import { createRng, newRngStates, rnl, seedRng } from '../src/rng';
 
 const GOLDEN: Record<number, number[]> = {
   42: [1028872839, 2516511472, 400437680, 853279530, 1920286840, 3588795744, 3644712829, 3990689672],
@@ -126,5 +126,73 @@ describe('rng', () => {
     expect(core).toEqual(seedRng(42));
     expect(cosmetic).toEqual(seedRng((42 ^ 0x9e3779b9) >>> 0));
     expect(core).not.toEqual(cosmetic);
+  });
+});
+
+describe('rnl (ref: src/rnd.c rnl)', () => {
+  const counts = (x: number, luck: number, n = 20000): number[] => {
+    const r = createRng(seedRng(7));
+    const h = new Array<number>(x).fill(0);
+    for (let i = 0; i < n; i++) {
+      const v = rnl(r, x, luck);
+      h[v] = (h[v] as number) + 1;
+    }
+    return h;
+  };
+
+  test('luck 0 is exactly rn2 (same stream)', () => {
+    const a = createRng(seedRng(3));
+    const b = createRng(seedRng(3));
+    for (let i = 0; i < 200; i++) expect(rnl(a, 7)).toBe(b.rn2(7));
+  });
+
+  test('luck 0 distribution is roughly uniform', () => {
+    for (const c of counts(7, 0)) expect(Math.abs(c - 20000 / 7)).toBeLessThan(300);
+  });
+
+  test('always within 0..x-1', () => {
+    fc.assert(
+      fc.property(
+        fc.integer({ min: 0, max: 2 ** 32 - 1 }),
+        fc.integer({ min: 1, max: 40 }),
+        fc.integer({ min: -13, max: 13 }),
+        (seed, x, luck) => {
+          const r = createRng(seedRng(seed));
+          for (let i = 0; i < 20; i++) {
+            const v = rnl(r, x, luck);
+            if (!Number.isInteger(v) || v < 0 || v >= x) throw new Error(`out of range ${String(v)}`);
+          }
+        },
+      ),
+    );
+  });
+
+  test('good luck biases toward 0, bad luck toward x-1', () => {
+    const good = counts(7, 13);
+    const bad = counts(7, -13);
+    expect(good[0] as number).toBeGreaterThan(20000 * 0.4);
+    expect(bad[6] as number).toBeGreaterThan(20000 * 0.4);
+    // luck 13 on x<=15 gives adjustment 4 (14/3): 0..4 collapse to 0 except the 1/41 unadjusted rolls
+    expect(good[6] as number).toBeLessThan(good[0] as number);
+  });
+
+  test('small-range adjustment is luck/3 rounded away from 0', () => {
+    // luck 1 -> adjustment 0 (no bias, same stream as rn2); luck 2 -> adjustment 1
+    const a = createRng(seedRng(11));
+    const b = createRng(seedRng(11));
+    for (let i = 0; i < 100; i++) expect(rnl(a, 7, 1)).toBe(b.rn2(7));
+    const c = counts(7, 2);
+    expect(c[0] as number).toBeGreaterThan(20000 / 7 + 1000);
+  });
+
+  test('large ranges use the full luck as adjustment', () => {
+    const r = createRng(seedRng(5));
+    let sum = 0;
+    for (let i = 0; i < 5000; i++) sum += rnl(r, 100, 10);
+    expect(sum / 5000).toBeLessThan(45); // plain mean is 49.5; shifted down by ~10
+  });
+
+  test('rejects non-positive x', () => {
+    expect(() => rnl(createRng(seedRng(1)), 0)).toThrow(RangeError);
   });
 });

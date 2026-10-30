@@ -19,6 +19,12 @@ export interface LevelTerrain {
   door_closed: DefId;
   stairs_up: DefId;
   stairs_down: DefId;
+  /** Secret door in a vertical wall; looks like a wall until found by searching. */
+  sdoor_v: DefId;
+  /** Secret door in a horizontal wall. */
+  sdoor_h: DefId;
+  /** Secret corridor; looks like stone until found by searching. */
+  scorr: DefId;
 }
 
 export const VANILLA_TERRAIN: LevelTerrain = {
@@ -37,6 +43,9 @@ export const VANILLA_TERRAIN: LevelTerrain = {
   door_closed: 'nh:door_closed',
   stairs_up: 'nh:stairs_up',
   stairs_down: 'nh:stairs_down',
+  sdoor_v: 'nh:sdoor_v',
+  sdoor_h: 'nh:sdoor_h',
+  scorr: 'nh:scorr',
 };
 
 /** Palette order (indices into Level.palette). */
@@ -56,6 +65,9 @@ export const PALETTE_KEYS: readonly (keyof LevelTerrain)[] = [
   'door_closed',
   'stairs_up',
   'stairs_down',
+  'sdoor_v',
+  'sdoor_h',
+  'scorr',
 ];
 
 /** Palette indices by key, for readers of generated levels. */
@@ -75,4 +87,7 @@ export const PAL = {
   door_closed: 12,
   stairs_up: 13,
   stairs_down: 14,
+  sdoor_v: 15,
+  sdoor_h: 16,
+  scorr: 17,
 } as const;

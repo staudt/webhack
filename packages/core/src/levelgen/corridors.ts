@@ -17,12 +17,9 @@ const INWARD: Record<Dir, Pt> = {
 
 /** ref: src/mklev.c bydoor() */
 function bydoor(g: Grid, x: number, y: number): boolean {
-  return (
-    (g.isok(x + 1, y) && g.get(x + 1, y) === T.DOOR) ||
-    (g.isok(x - 1, y) && g.get(x - 1, y) === T.DOOR) ||
-    (g.isok(x, y + 1) && g.get(x, y + 1) === T.DOOR) ||
-    (g.isok(x, y - 1) && g.get(x, y - 1) === T.DOOR)
-  );
+  const isDoor = (px: number, py: number): boolean =>
+    g.isok(px, py) && (g.get(px, py) === T.DOOR || g.get(px, py) === T.SDOOR);
+  return isDoor(x + 1, y) || isDoor(x - 1, y) || isDoor(x, y + 1) || isDoor(x, y - 1);
 }
 
 /** ref: src/mklev.c okdoor() */
@@ -48,7 +45,7 @@ const inside = (r: IRoom, x: number, y: number): boolean =>
 function goodDoorPos(g: Grid, x: number, y: number, dir: Dir, room: IRoom): boolean {
   if (!g.isok(x, y)) return false;
   const t = g.get(x, y);
-  if (t !== T.HWALL && t !== T.VWALL && t !== T.DOOR) return false;
+  if (t !== T.HWALL && t !== T.VWALL && t !== T.DOOR && t !== T.SDOOR) return false;
   if (bydoor(g, x, y)) return false;
   const tx = x + INWARD[dir].x;
   const ty = y + INWARD[dir].y;
@@ -90,8 +87,8 @@ export function finddpos(g: Grid, rng: Rng, dir: Dir, room: IRoom): Pt | null {
 
 /**
  * Make a door at x,y.
- * ref: src/mklev.c dodoor() / dosdoor(). M1 deviations (DEVIATIONS.md): a secret door is built as a
- * closed door, locked doors are closed doors, trapped doors/mimics are never made.
+ * ref: src/mklev.c dodoor() / dosdoor(). Deviations (DEVIATIONS.md): locked doors are closed
+ * doors, trapped doors/mimics are never made.
  */
 export function dodoor(g: Grid, rng: Rng, depth: number, x: number, y: number): void {
   const wasWall = isWall(g.get(x, y));
@@ -100,7 +97,11 @@ export function dodoor(g: Grid, rng: Rng, depth: number, x: number, y: number): 
   const sdoor = depth > 2 && rng.rn2(8) === 0;
   let mask: number;
   if (sdoor && wasWall) {
-    mask = D_CLOSED; // SDOOR: locked or closed
+    // ref: mklev.c dosdoor() SDOOR branch: locked (rn2(5)) or closed; both are D_CLOSED here
+    rng.rn2(5);
+    g.set(x, y, T.SDOOR);
+    g.setMask(x, y, D_CLOSED | (horiz ? D_HORIZ : 0));
+    return;
   } else if (rng.rn2(3) === 0) {
     if (rng.rn2(5) === 0) mask = D_ISOPEN;
     else mask = D_CLOSED; // D_LOCKED (rn2(6)) or D_CLOSED
@@ -113,7 +114,8 @@ export function dodoor(g: Grid, rng: Rng, depth: number, x: number, y: number): 
 
 /**
  * Dig a corridor from org to dest. With nxcor it may stop at random (dead end).
- * ref: src/sp_lev.c dig_corridor(). Boulders and secret corridors are not generated.
+ * ref: src/sp_lev.c dig_corridor(). Boulders are not generated. At depth > 2 each new corridor cell
+ * is secret with chance 1/100 (maybe_sdoor(100)).
  */
 export function digCorridor(
   g: Grid,
@@ -122,6 +124,7 @@ export function digCorridor(
   dest: Pt,
   nxcor: boolean,
   maxSteps: number,
+  depth = 1,
 ): { ok: boolean; npoints: number } {
   const { colno: COLNO, rowno: ROWNO } = g;
   let npoints = 0;
@@ -143,7 +146,7 @@ export function digCorridor(
   xx -= dx;
   yy -= dy;
   let cct = 0;
-  const passable = (t: number): boolean => t === T.STONE || t === T.CORR;
+  const passable = (t: number): boolean => t === T.STONE || t === T.CORR || t === T.SCORR;
   while (xx !== tx || yy !== ty) {
     if (cct++ > maxSteps || (nxcor && rng.rn2(35) === 0)) return { ok: false, npoints };
     xx += dx;
@@ -153,8 +156,9 @@ export function digCorridor(
     const here = g.get(xx, yy);
     if (here === T.STONE) {
       npoints++;
-      g.set(xx, yy, T.CORR);
-    } else if (here !== T.CORR) {
+      // ref: sp_lev.c dig_corridor(): ftyp == CORR && maybe_sdoor(100)
+      g.set(xx, yy, depth > 2 && rng.rn2(100) === 0 ? T.SCORR : T.CORR);
+    } else if (here !== T.CORR && here !== T.SCORR) {
       return { ok: false, npoints }; // strange ...
     }
 
@@ -237,7 +241,7 @@ function join(g: Grid, rng: Rng, depth: number, a: number, b: number, nxcor: boo
   const dest = { x: tt.x - dx, y: tt.y - dy };
   // Deviation: the 500-step cap is scaled up for maps much larger than 80x21.
   const maxSteps = Math.max(500, 2 * (g.colno + g.rowno));
-  const res = digCorridor(g, rng, org, dest, nxcor, maxSteps);
+  const res = digCorridor(g, rng, org, dest, nxcor, maxSteps, depth);
 
   // we created at least 1 tile of corridor, even if it failed
   if (res.npoints > 0 && (okdoor(g, cc.x, cc.y) || !nxcor)) dodoor(g, rng, depth, cc.x, cc.y);
@@ -294,7 +298,9 @@ const NB: readonly Pt[] = [
   { x: -1, y: 0 },
 ];
 
-const walkable = (t: number): boolean => t === T.DOOR || t === T.CORR || t === T.ROOM;
+/** Secret doors and corridors count: the hero can find them by searching. */
+const walkable = (t: number): boolean =>
+  t === T.DOOR || t === T.CORR || t === T.ROOM || t === T.SDOOR || t === T.SCORR;
 
 /**
  * Flood fill over 4-connected walkable cells; returns the component label of every cell (-1 = none).
@@ -333,7 +339,7 @@ function doorCandidates(g: Grid, room: IRoom, out: Map<number, Pt>): void {
     if (!okdoor(g, wx, wy)) return;
     if (ox < 1 || oy < 1 || ox > g.colno - 2 || oy > g.rowno - 2) return;
     const t = g.get(ox, oy);
-    if ((t === T.STONE || t === T.CORR) && !out.has(g.idx(ox, oy))) {
+    if ((t === T.STONE || t === T.CORR || t === T.SCORR) && !out.has(g.idx(ox, oy))) {
       out.set(g.idx(ox, oy), { x: wx, y: wy });
     }
   };
@@ -389,7 +395,7 @@ function connectOne(g: Grid, room: IRoom, label: Int32Array, main: number): void
       if (nx < 1 || ny < 1 || nx > g.colno - 2 || ny > g.rowno - 2) continue;
       const ni = g.idx(nx, ny);
       const t = g.typ[ni] as number;
-      if ((parent[ni] as number) === -1 && (t === T.STONE || t === T.CORR)) {
+      if ((parent[ni] as number) === -1 && (t === T.STONE || t === T.CORR || t === T.SCORR)) {
         parent[ni] = c;
         queue.push(ni);
       }

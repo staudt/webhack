@@ -16,6 +16,10 @@ export const T = {
   DOOR: 7,
   CORR: 8,
   ROOM: 9,
+  /** Secret door (ref: rm.h SDOOR); the D_HORIZ bit of its mask tells wall orientation. */
+  SDOOR: 10,
+  /** Secret corridor (ref: rm.h SCORR). */
+  SCORR: 11,
 } as const;
 
 /** Door state bits (ref: include/rm.h D_NODOOR D_ISOPEN D_CLOSED). 0 = no door. */

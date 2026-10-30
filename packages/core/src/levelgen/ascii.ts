@@ -1,7 +1,7 @@
 import type { Level } from '../types/level';
 
 /** Glyph per palette index (see PAL in terrain.ts). Open doors follow NetHack: a door in a vertical wall shows '-'. */
-const GLYPHS = ' |-----.#.-|+<>';
+const GLYPHS = ' |-----.#.-|+<>|- ';
 
 /** Render a generated level as ASCII, one row per line. For tests and debugging. */
 export function levelToAscii(level: Level): string {

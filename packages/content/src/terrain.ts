@@ -126,6 +126,31 @@ export const TERRAIN: readonly TerrainDef[] = [
     stairs: 'down',
     glyph: { ch: '>', fg: GRAY },
   },
+  // Secret doors and corridors look like what they hide (ref: defsym.h S_vwall/S_hwall/S_stone).
+  {
+    id: 'nh:sdoor_v',
+    nameKey: 'terrain.wall',
+    passable: false,
+    opaque: true,
+    glyph: { ch: '|', fg: GRAY },
+    looksLike: 'nh:vwall',
+  },
+  {
+    id: 'nh:sdoor_h',
+    nameKey: 'terrain.wall',
+    passable: false,
+    opaque: true,
+    glyph: { ch: '-', fg: GRAY },
+    looksLike: 'nh:hwall',
+  },
+  {
+    id: 'nh:scorr',
+    nameKey: 'terrain.stone',
+    passable: false,
+    opaque: true,
+    glyph: { ch: ' ', fg: BLACK },
+    looksLike: 'nh:stone',
+  },
 ];
 
 /** Short names for terrain ids, for convenient reuse. */
@@ -145,4 +170,7 @@ export const T = {
   door_closed: 'nh:door_closed',
   stairs_up: 'nh:stairs_up',
   stairs_down: 'nh:stairs_down',
+  sdoor_v: 'nh:sdoor_v',
+  sdoor_h: 'nh:sdoor_h',
+  scorr: 'nh:scorr',
 } as const;

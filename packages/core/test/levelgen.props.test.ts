@@ -35,6 +35,10 @@ const PASSABLE = new Set<number>([
   PAL.door_closed,
   PAL.stairs_up,
   PAL.stairs_down,
+  // secret doors and corridors can be found by searching, so they count for connectivity
+  PAL.sdoor_v,
+  PAL.sdoor_h,
+  PAL.scorr,
 ]);
 const DOORS = new Set<number>([PAL.doorway, PAL.door_open_v, PAL.door_open_h, PAL.door_closed]);
 const WALLS = new Set<number>([
@@ -83,7 +87,7 @@ function checkLevel(l: Level, w: number, h: number): void {
   // structure
   expect(l.cells.length).toBe(w * h);
   expect(l.lit.length).toBe(w * h);
-  expect(l.palette.length).toBe(15);
+  expect(l.palette.length).toBe(18);
   for (const c of l.cells) {
     if (!(Number.isInteger(c) && c >= 0 && c < l.palette.length))
       throw new Error('bad palette index');
@@ -117,6 +121,19 @@ function checkLevel(l: Level, w: number, h: number): void {
       if (at(l, x, y) === PAL.door_open_v && !vert) throw new Error('open_v not in vertical wall');
       if (at(l, x, y) === PAL.door_open_h && !horiz)
         throw new Error('open_h not in horizontal wall');
+    }
+  }
+
+  // secret doors sit in a wall line like regular doors, and only below depth 2
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const t = at(l, x, y);
+      if (t === PAL.sdoor_v && !(WALLS.has(at(l, x, y - 1)) && WALLS.has(at(l, x, y + 1))))
+        throw new Error(`sdoor_v at ${String(x)},${String(y)} not in a vertical wall line`);
+      if (t === PAL.sdoor_h && !(WALLS.has(at(l, x - 1, y)) && WALLS.has(at(l, x + 1, y))))
+        throw new Error(`sdoor_h at ${String(x)},${String(y)} not in a horizontal wall line`);
+      if ((t === PAL.sdoor_v || t === PAL.sdoor_h || t === PAL.scorr) && l.depth <= 2)
+        throw new Error('secret door or corridor above depth 3');
     }
   }
 
@@ -171,6 +188,20 @@ describe('levelgen properties', () => {
       }),
       { numRuns: 12 },
     );
+  });
+
+  test('secret doors and corridors do appear below depth 2', () => {
+    let doors = 0;
+    let corrs = 0;
+    for (let seed = 0; seed < 40; seed++) {
+      const l = gen(seed, 80, 21, 5);
+      for (const c of l.cells) {
+        if (c === PAL.sdoor_v || c === PAL.sdoor_h) doors++;
+        if (c === PAL.scorr) corrs++;
+      }
+    }
+    expect(doors).toBeGreaterThan(0);
+    expect(corrs).toBeGreaterThan(0);
   });
 
   test('determinism', () => {

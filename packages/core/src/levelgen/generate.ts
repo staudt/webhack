@@ -65,6 +65,10 @@ function paletteIndex(typ: number, mask: number): number {
       if (mask & D_CLOSED) return PAL.door_closed;
       if (mask & D_ISOPEN) return mask & D_HORIZ ? PAL.door_open_h : PAL.door_open_v;
       return PAL.doorway;
+    case T.SDOOR:
+      return mask & D_HORIZ ? PAL.sdoor_h : PAL.sdoor_v;
+    case T.SCORR:
+      return PAL.scorr;
     case T.ROOM:
       return PAL.floor;
     case T.CORR:

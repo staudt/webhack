@@ -67,3 +67,25 @@ export function createRng(state: RngState): Rng {
   };
   return { next, rn2, rnd, d };
 }
+
+/**
+ * Luck-adjusted random number in 0..x-1: good luck pulls results toward 0, bad luck toward x-1.
+ * ref: src/rnd.c rnl()
+ */
+export function rnl(rng: Rng, x: number, luck = 0): number {
+  if (!Number.isSafeInteger(x) || x < 1) {
+    throw new RangeError(`rnl: x must be a positive integer, got ${String(x)}`);
+  }
+  let adjustment = luck;
+  if (x <= 15) {
+    // for small ranges, use Luck/3 (rounded away from 0)
+    adjustment = (Math.floor((Math.abs(adjustment) + 1) / 3)) * Math.sign(adjustment);
+  }
+  let i = rng.rn2(x);
+  if (adjustment !== 0 && rng.rn2(37 + Math.abs(adjustment)) !== 0) {
+    i -= adjustment;
+    if (i < 0) i = 0;
+    else if (i >= x) i = x - 1;
+  }
+  return i;
+}

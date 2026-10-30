@@ -11,9 +11,13 @@ import {
   type ActionDef,
   type Offer,
   type Ctx,
+  type DefId,
   type Dir,
+  type Level,
   type PlayerAction,
   type Pos,
+  type TerrainDef,
+  rnl,
 } from '@nh/core';
 import { T } from './terrain';
 
@@ -110,6 +114,22 @@ const wait: ActionDef = {
   perform: () => NORMAL_SPEED,
 };
 
+/** Terrain def under the hero. */
+function terrainUnderHero(ctx: Ctx): TerrainDef {
+  const pos = playerAt(ctx);
+  const level = getLevel(ctx.state);
+  const id = level.palette[level.cells[cellIndex(level, pos.x, pos.y)] ?? 0];
+  if (id === undefined) throw new Error('Hero stands on unknown terrain');
+  return ctx.defs.terrain(id);
+}
+
+/** Sets a cell to terrain `id`, adding it to the level palette when missing. */
+function setTerrain(level: Level, x: number, y: number, id: DefId): void {
+  let pi = level.palette.indexOf(id);
+  if (pi === -1) pi = level.palette.push(id) - 1;
+  level.cells[cellIndex(level, x, y)] = pi;
+}
+
 const search: ActionDef = {
   id: 'nh:search',
   labelKey: 'action.search',
@@ -119,10 +139,87 @@ const search: ActionDef = {
       ? [{ action: { type: 'search' }, labelKey: 'action.search' }]
       : [],
   perform(ctx) {
-    // ref: src/detect.c dosearch0(); M1 has no secret doors, traps or hidden monsters to find
+    // ref: src/detect.c dosearch0(): x outer, y inner over the 3x3 around the hero. Hidden monsters
+    // and traps are not implemented; there is no Luck or lenses/artifact bonus (fund = 0, Luck = 0).
+    const here = playerAt(ctx);
+    const level = getLevel(ctx.state);
     ctx.emit({ type: 'searched' });
+    for (let x = here.x - 1; x <= here.x + 1; x++) {
+      for (let y = here.y - 1; y <= here.y + 1; y++) {
+        if (!inBounds(level, x, y) || (x === here.x && y === here.y)) continue;
+        const id = level.palette[level.cells[cellIndex(level, x, y)] ?? 0];
+        if (id === T.sdoor_v || id === T.sdoor_h) {
+          if (rnl(ctx.rng, 7) !== 0) continue;
+          // ref: cvt_sdoor_to_door(): a closed door (locked doors are closed in this port)
+          setTerrain(level, x, y, T.door_closed);
+          ctx.emit({ type: 'msg', key: 'search.found_door' });
+        } else if (id === T.scorr) {
+          if (rnl(ctx.rng, 7) !== 0) continue;
+          setTerrain(level, x, y, T.corr);
+          ctx.emit({ type: 'msg', key: 'search.found_passage' });
+        }
+      }
+    }
     return NORMAL_SPEED;
   },
 };
 
-export const ACTIONS: readonly ActionDef[] = [move, wait, search];
+// ref: src/do.c dodown()
+const down: ActionDef = {
+  id: 'nh:down',
+  labelKey: 'action.down',
+  handles: 'mod',
+  offer: (ctx, target) =>
+    target.kind === 'self' && terrainUnderHero(ctx).stairs === 'down'
+      ? [{ action: { type: 'mod', action: 'nh:down' }, labelKey: 'action.down' }]
+      : [],
+  perform(ctx) {
+    if (terrainUnderHero(ctx).stairs !== 'down') {
+      ctx.emit({ type: 'msg', key: 'stairs.cant_down' });
+      return 0;
+    }
+    // Arrive on the up stairs of the next level (ref: goto_level() u_on_newpos(xupstair)).
+    ctx.goToLevel(getLevel(ctx.state).depth + 1, 'up');
+    return NORMAL_SPEED;
+  },
+};
+
+// ref: src/do.c doup()
+const up: ActionDef = {
+  id: 'nh:up',
+  labelKey: 'action.up',
+  handles: 'mod',
+  offer: (ctx, target) =>
+    target.kind === 'self' && terrainUnderHero(ctx).stairs === 'up'
+      ? [{ action: { type: 'mod', action: 'nh:up' }, labelKey: 'action.up' }]
+      : [],
+  perform(ctx) {
+    if (terrainUnderHero(ctx).stairs !== 'up') {
+      ctx.emit({ type: 'msg', key: 'stairs.cant_up' });
+      return 0;
+    }
+    const depth = getLevel(ctx.state).depth;
+    if (depth > 1) {
+      ctx.goToLevel(depth - 1, 'down');
+      return NORMAL_SPEED;
+    }
+    // ref: doup(): ledger_no == 1 -> y_n("Beware, there will be no return!  Still climb?")
+    ctx.ask({ id: 'leave-dungeon', kind: 'yn', key: 'stairs.leave_confirm' }, 'nh:up', null);
+    return 0;
+  },
+  answer(ctx, value) {
+    // Anything but 'y' returns ECMD_OK: no message, no time.
+    if (value !== true) return 0;
+    // ref: src/do.c doup() -> prev_level() -> done(ESCAPED)
+    ctx.endGame({
+      kind: 'escaped',
+      killer: 'escaped',
+      turn: ctx.state.turn,
+      depth: 1,
+      level: getPlayer(ctx.state).c.experience?.level ?? 1,
+    });
+    return 0;
+  },
+};
+
+export const ACTIONS: readonly ActionDef[] = [move, wait, search, down, up];
