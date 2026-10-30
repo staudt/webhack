@@ -174,13 +174,14 @@ interface RoleDef {
   id: DefId;
   nameKey: string;
   speed: number;
+  glyph: { ch: string; fg: string }; // the player entity's def is the role id
 }
 interface ActionDef {
   id: DefId;
   labelKey: string;
   offer(ctx: Ctx, target: Target): ActionOffer[]; // what this action contributes to actionsFor
   perform(ctx: Ctx, action: PlayerAction): number; // energy cost
-  handles: PlayerAction['type']; // built-ins: 'move' | 'wait' | 'search'; others 'mod'
+  handles: PlayerAction['type']; // at most one handler per built-in type; mod actions use 'mod'
 }
 
 interface ModApi {
