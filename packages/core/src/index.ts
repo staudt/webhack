@@ -10,3 +10,5 @@ export { cellRules, checkStep } from './movement';
 export type { CellRules, StepCheck } from './movement';
 export { computeVisible, updateMemory, newMemory } from './vision';
 export { findPath } from './path';
+export { generateLevel, levelToAscii, VANILLA_TERRAIN, MIN_LEVEL_WIDTH, MIN_LEVEL_HEIGHT } from './levelgen/index';
+export type { GenOptions, LevelTerrain } from './levelgen/index';
