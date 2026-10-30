@@ -1,0 +1,35 @@
+{
+  "name": "webhack",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@12.16.1",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "dev": "pnpm --filter @nh/app dev",
+    "build": "pnpm --filter @nh/app build",
+    "typecheck": "pnpm -r --parallel typecheck",
+    "lint": "eslint .",
+    "boundaries": "depcruise packages --config .dependency-cruiser.cjs",
+    "test": "vitest run --coverage",
+    "test:watch": "vitest",
+    "format": "prettier --write .",
+    "check": "pnpm typecheck && pnpm lint && pnpm boundaries && pnpm test"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^26.6.6",
+    "@vitest/coverage-v8": "^5.0.5",
+    "dependency-cruiser": "^18.7.0",
+    "eslint": "^10.13.0",
+    "eslint-config-prettier": "^10.1.8",
+    "fast-check": "^4.10.2",
+    "globals": "^17.13.0",
+    "prettier": "^3.9.10",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.72.1",
+    "vite": "^8.3.5",
+    "vitest": "^5.0.5"
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "name": "@nh/app",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit -p ."
+  },
+  "dependencies": {
+    "@nh/core": "workspace:*",
+    "@nh/content": "workspace:*",
+    "@nh/testkit": "workspace:*",
+    "@nh/ui": "workspace:*",
+    "@nh/render-ascii": "workspace:*",
+    "@nh/render-canvas": "workspace:*",
+    "@nh/modern-ui": "workspace:*"
+  }
+}

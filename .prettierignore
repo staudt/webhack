@@ -1,0 +1,6 @@
+vendor
+pnpm-lock.yaml
+coverage
+dist
+node_modules
+*.md
