@@ -1,5 +1,5 @@
 import type { ActionType, PlayerAction } from './action';
-import type { DefId, Glyph } from './common';
+import type { DefId, Glyph, Json } from './common';
 import type { GameEvent } from './event';
 import type { Level } from './level';
 import type { ActionOffer, CoreQuery, Target } from './query';
@@ -24,15 +24,24 @@ export interface RoleDef {
   glyph: Glyph;
 }
 
+/** An offer as returned by `ActionDef.offer`; the engine adds `source`. */
+export type Offer = Omit<ActionOffer, 'source'>;
+
 export interface ActionDef {
   id: DefId;
   labelKey: string;
   /** Which PlayerAction type this def performs. Built-ins use their own type; mod actions use 'mod' and match on `action.action === id`. */
   handles: ActionType;
   /** Offers this action contributes to `actionsFor(target)`. */
-  offer(ctx: Ctx, target: Target): ActionOffer[];
+  offer(ctx: Ctx, target: Target): Offer[];
   /** Performs the action; returns the energy cost (0 = no time passes). */
   perform(ctx: Ctx, action: PlayerAction): number;
+}
+
+/** Fires when a scheduled timer comes due at end of turn. */
+export interface TimerDef {
+  id: DefId;
+  fire(ctx: Ctx, data: Json): void;
 }
 
 export interface Ctx {
@@ -42,6 +51,8 @@ export interface Ctx {
   defs: Registry;
   emit(e: GameEvent): void;
   query: CoreQuery;
+  /** Schedule a registered timer to fire `delay` (>= 1) turns from now. */
+  schedule(delay: number, kind: DefId, data: Json): void;
 }
 
 export interface Hooks {
@@ -62,6 +73,7 @@ export interface ModApi {
   defineTerrain(d: TerrainDef): void;
   defineRole(d: RoleDef): void;
   defineAction(d: ActionDef): void;
+  defineTimer(d: TimerDef): void;
   on<K extends HookName>(hook: K, fn: Hooks[K], opts?: HookOptions): void;
 }
 
@@ -84,6 +96,8 @@ export interface Registry {
   terrain(id: DefId): TerrainDef;
   hasTerrain(id: DefId): boolean;
   role(id: DefId): RoleDef;
+  timer(id: DefId): TimerDef;
+  hasTimer(id: DefId): boolean;
   readonly roles: readonly RoleDef[];
   readonly terrains: readonly TerrainDef[];
   /** In registration order. */

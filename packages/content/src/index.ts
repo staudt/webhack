@@ -1,4 +1,5 @@
 import type { Mod } from '@nh/core';
+import { ACTIONS } from './actions';
 import { ROLES } from './roles';
 import { TERRAIN } from './terrain';
 
@@ -10,10 +11,11 @@ export const vanillaMod: Mod = {
   register(api) {
     for (const t of TERRAIN) api.defineTerrain(t);
     for (const r of ROLES) api.defineRole(r);
-    // actions: registered in a later step
+    for (const a of ACTIONS) api.defineAction(a);
   },
 };
 
 export { TERRAIN, T } from './terrain';
+export { ACTIONS } from './actions';
 export { ROLES } from './roles';
 export { messagesEn } from './messages.en';

@@ -1,6 +1,7 @@
 // English message text. Keys are referenced by core events; `{param}` placeholders are filled from event params.
 export const messagesEn: Record<string, string> = {
   welcome: 'Hello, welcome to webhack! You are a {role}.',
+  'welcome.back': 'Hello, welcome back to webhack! You are a {role}.',
   'door.opens': 'The door opens.',
   'action.move': 'Move {dir}',
   'action.wait': 'Wait',
@@ -26,4 +27,21 @@ export const messagesEn: Record<string, string> = {
   'describe.unexplored': 'unexplored',
   'describe.remembered': '{what} (remembered)',
   'describe.you': 'you, a {role}',
+  // Def ids double as display-name keys (the UI's look command translates '@' + def id).
+  'nh:stone': 'stone',
+  'nh:vwall': 'wall',
+  'nh:hwall': 'wall',
+  'nh:tlcorn': 'wall',
+  'nh:trcorn': 'wall',
+  'nh:blcorn': 'wall',
+  'nh:brcorn': 'wall',
+  'nh:floor': 'floor of a room',
+  'nh:corr': 'corridor',
+  'nh:doorway': 'doorway',
+  'nh:door_open_v': 'open door',
+  'nh:door_open_h': 'open door',
+  'nh:door_closed': 'closed door',
+  'nh:stairs_up': 'staircase up',
+  'nh:stairs_down': 'staircase down',
+  'nh:valkyrie': 'Valkyrie',
 };

@@ -37,3 +37,7 @@ describe('vanilla content', () => {
     }
   });
 });
+
+test('every terrain and role id has a display name keyed by its def id', () => {
+  for (const d of [...TERRAIN, ...ROLES]) expect(messagesEn[d.id], d.id).toBeTypeOf('string');
+});

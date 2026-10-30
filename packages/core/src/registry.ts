@@ -11,6 +11,7 @@ import type {
   Registry,
   RoleDef,
   TerrainDef,
+  TimerDef,
 } from './types/mod';
 
 export interface ModLoadIssue {
@@ -50,6 +51,7 @@ export function loadMods(mods: readonly Mod[]): Registry {
   const issues: ModLoadIssue[] = [];
   const terrains = new Map<string, TerrainDef>();
   const roles = new Map<string, RoleDef>();
+  const timers = new Map<string, TimerDef>();
   const actions: (ActionDef & { mod: string })[] = [];
   const builtinHandlers = new Map<ActionType, string>();
   const allIds = new Set<string>();
@@ -155,6 +157,11 @@ export function loadMods(mods: readonly Mod[]): Registry {
         }
         actions.push({ ...d, mod: modId });
       },
+      defineTimer(d) {
+        if (!guard('defineTimer') || !checkId(d.id, 'timer')) return;
+        fn(d.fire, 'fire', d.id);
+        timers.set(d.id, d);
+      },
       on<K extends HookName>(name: K, hookFn: Hooks[K], opts?: HookOptions) {
         if (!guard(`on('${String(name)}')`)) return;
         if (!HOOK_NAMES.includes(name)) {
@@ -209,6 +216,12 @@ export function loadMods(mods: readonly Mod[]): Registry {
       if (!r) throw new Error(`Unknown role '${id}'`);
       return r;
     },
+    timer(id) {
+      const t = timers.get(id);
+      if (!t) throw new Error(`Unknown timer '${id}'`);
+      return t;
+    },
+    hasTimer: (id) => timers.has(id),
     roles: roleList,
     terrains: terrainList,
     actions,

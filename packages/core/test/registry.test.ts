@@ -588,3 +588,30 @@ describe('requireTerrains', () => {
     ]);
   });
 });
+
+describe('timers', () => {
+  const fire = () => undefined;
+
+  test('defineTimer validates fire', () => {
+    const issues = one((api) => api.defineTimer({ id: id('m:t'), fire: bad(42) }));
+    expect(issues).toEqual([{ modId: 'm', defId: 'm:t', path: 'fire', reason: 'must be a function' }]);
+  });
+
+  test('defineTimer validates the id namespace', () => {
+    const issues = one((api) => api.defineTimer({ id: id('other:t'), fire }));
+    expect(issues).toHaveLength(1);
+  });
+
+  test('timer() and hasTimer()', () => {
+    const t = { id: id('m:t'), fire };
+    const reg = loadMods([mod('m', (api) => api.defineTimer(t))]);
+    expect(reg.hasTimer(id('m:t'))).toBe(true);
+    expect(reg.hasTimer(id('m:u'))).toBe(false);
+    expect(reg.timer(id('m:t'))).toBe(t);
+  });
+
+  test('unknown timer throws', () => {
+    const reg = loadMods([mod('m', () => undefined)]);
+    expect(() => reg.timer(id('m:nope'))).toThrow("Unknown timer 'm:nope'");
+  });
+});

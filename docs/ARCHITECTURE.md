@@ -5,7 +5,7 @@ This document holds the contracts between packages. The type definitions live in
 ## Data flow
 
 ```
- ┌──────────── main thread ─────────────┐        ┌────────── Web Worker ──────────┐
+ ┌──────────── main thread ──────────────┐        ┌─────────── Web Worker ──────────┐
  │ app ── ui (client mods, input, menus) │ ToCore │ host (core/host.ts)             │
  │   │      │                            │ ─────▶ │   engine = createEngine(mods)   │
  │   │      └─▶ Renderer (render-ascii)  │        │   state: GameState (private)    │
@@ -133,7 +133,7 @@ interface Prompt {
 
 ```ts
 interface Engine {
-  newGame(opts: { seed: number; width?: number; height?: number; role?: DefId }): GameState;
+  newGame(opts: { seed: number; width?: number; height?: number; role?: DefId }): StepResult; // events include 'welcome'
   step(state: GameState, action: PlayerAction): StepResult; // mutates state in place
   query(state: GameState): CoreQuery;
   save(state: GameState, replay: Replay): string;
@@ -150,6 +150,9 @@ Each step does the following (ref: src/allmain.c moveloop):
 5. Vision is recomputed and memory updated.
 
 Messages are always keys plus params. English text lives in `content/src/messages.en.ts` and is loaded on the client side.
+A string param that starts with `@` is itself a message key, which the UI translates before interpolating. For example, `{ key: 'welcome', params: { role: '@role.valkyrie' } }` becomes "… You are a Valkyrie.".
+
+Due timers fire at the end of each turn, before the `endOfTurn` hooks, in `(at, seq)` order.
 
 ## Mods
 
@@ -179,7 +182,7 @@ interface RoleDef {
 interface ActionDef {
   id: DefId;
   labelKey: string;
-  offer(ctx: Ctx, target: Target): ActionOffer[]; // what this action contributes to actionsFor
+  offer(ctx: Ctx, target: Target): Omit<ActionOffer, 'source'>[]; // the engine adds `source`
   perform(ctx: Ctx, action: PlayerAction): number; // energy cost
   handles: PlayerAction['type']; // at most one handler per built-in type; mod actions use 'mod'
 }
@@ -188,6 +191,7 @@ interface ModApi {
   defineTerrain(d: TerrainDef): void;
   defineRole(d: RoleDef): void;
   defineAction(d: ActionDef): void;
+  defineTimer(d: TimerDef): void;
   on<K extends keyof Hooks>(hook: K, fn: Hooks[K], opts?: { priority?: number }): void;
 }
 
@@ -198,10 +202,16 @@ interface Hooks {
   newLevel(ctx: Ctx, level: Level): void;
 }
 
+interface TimerDef {
+  id: DefId;
+  fire(ctx: Ctx, data: Json): void;
+}
+
 interface Ctx {
   readonly state: GameState;
   rng: Rng;
   cosmetic: Rng;
+  schedule(delay: number, kind: DefId, data: Json): void; // timer fires `delay` turns from now
   defs: Registry;
   emit(e: GameEvent): void;
   query: CoreQuery;
