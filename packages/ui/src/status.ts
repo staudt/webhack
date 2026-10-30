@@ -77,14 +77,15 @@ export function ripArt(lines: string[]): string {
     const left = Math.floor(pad / 2);
     return ' '.repeat(left) + s + ' '.repeat(pad - left);
   };
+  // Stone edges: '|' at columns 2 and w + 3; the roof slopes in by one column per line.
   const row = (s: string): string => `  |${center(s)}|`;
   const out = [
-    `   ${'-'.repeat(w)}`,
-    ` ${' '.repeat(2)}/${' '.repeat(w + 2)}\\`,
+    `    ${'-'.repeat(w - 2)}`,
+    `   /${' '.repeat(w - 2)}\\`,
     ...lines.map(row),
     row(''),
-    `  *|${center('*  *  *')}| *`,
-    ` ${'_'.repeat(w + 6)}`,
+    ` *|${center('*  *  *')}|*`,
+    '_'.repeat(w + 6),
   ];
   return out.join('\n');
 }
