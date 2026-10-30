@@ -20,6 +20,13 @@ export function attachKeys(doc: Document, handler: (e: KeyboardEvent) => boolean
   return () => doc.removeEventListener('keydown', fn);
 }
 
+/** Keyup listener on `doc` (no filtering, so releases are never missed). Returns detach. */
+export function attachKeyUp(doc: Document, handler: (e: KeyboardEvent) => void): () => void {
+  const fn = (e: Event): void => handler(e as KeyboardEvent);
+  doc.addEventListener('keyup', fn);
+  return () => doc.removeEventListener('keyup', fn);
+}
+
 /** Pointer tap detection (moved < 10px and < 500ms). Returns detach. */
 export function attachTap(
   el: HTMLElement,

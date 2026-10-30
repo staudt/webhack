@@ -15,7 +15,8 @@ import type {
   UiCommand,
   ViewUpdate,
 } from '@nh/core';
-import { attachKeys, attachTap } from './input';
+import { ARROW_CODES, DEFAULT_CHORD_MS, createChord } from './chord';
+import { attachKeyUp, attachKeys, attachTap } from './input';
 import { DEFAULT_LOCALE, mergeMessages, translate, uiMessagesEn, type Catalogs } from './i18n';
 import { buildLayout } from './layout';
 import { Keymap } from './keymap';
@@ -34,6 +35,8 @@ export interface UiOptions {
   game: GameClient;
   mods: ClientMod[];
   locale?: string;
+  /** Window for chording two arrow keys into a diagonal; 0 disables. Default 100. */
+  chordWindowMs?: number;
 }
 
 export interface Ui {
@@ -89,6 +92,9 @@ export function createUi(opts: UiOptions): Ui {
   let modal: OpenMenu | null = null;
   let promptId: string | null = null;
 
+  // Assigned once runCommand exists; showModal only runs after that.
+  let chordReset = (): void => {};
+
   const closeModal = (): void => {
     const m = modal;
     modal = null;
@@ -97,6 +103,7 @@ export function createUi(opts: UiOptions): Ui {
   };
   const showModal = (title: string, entries: MenuEntry[], dismissable: boolean): OpenMenu => {
     closeModal();
+    chordReset();
     const m = openMenu(root, {
       title,
       entries,
@@ -191,10 +198,22 @@ export function createUi(opts: UiOptions): Ui {
     }
   };
 
+  const chord = createChord({
+    windowMs: opts.chordWindowMs ?? DEFAULT_CHORD_MS,
+    dispatch: runCommand,
+  });
+  chordReset = chord.reset;
+  const win = doc.defaultView;
+  win?.addEventListener('blur', chord.reset);
+  const detachKeyUp = attachKeyUp(doc, (e) => chord.up(e.code));
   const detachKeys = attachKeys(doc, (e) => {
     if (modal) return modal.onKey(e);
     const cmd = keymap.resolve(e);
     if (!cmd) return false;
+    if (ARROW_CODES.has(e.code)) {
+      chord.down(e.code, e.repeat, cmd);
+      return true;
+    }
     runCommand(cmd);
     return true;
   });
@@ -252,6 +271,9 @@ export function createUi(opts: UiOptions): Ui {
       destroyed = true;
       closeModal();
       detachKeys();
+      detachKeyUp();
+      win?.removeEventListener('blur', chord.reset);
+      chord.reset();
       detachTap();
       layout.menuBtn.removeEventListener('click', onMenuBtn);
       layout.actionsBtn.removeEventListener('click', onActionsBtn);

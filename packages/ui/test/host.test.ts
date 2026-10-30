@@ -71,6 +71,8 @@ const key = (k: string, code = k, init: KeyboardEventInit = {}) =>
   document.dispatchEvent(
     new KeyboardEvent('keydown', { key: k, code, bubbles: true, cancelable: true, ...init }),
   );
+const keyUp = (k: string, code = k) =>
+  document.dispatchEvent(new KeyboardEvent('keyup', { key: k, code, bubbles: true }));
 function tap(el: Element) {
   const o = { clientX: 1, clientY: 1, bubbles: true };
   el.dispatchEvent(
@@ -122,6 +124,29 @@ describe('host', () => {
     key('k', 'KeyK', { ctrlKey: true });
     key('q', 'KeyQ');
     expect(m.acts).toEqual([{ type: 'move', dir: 'n' }]);
+  });
+
+  test('arrow chord via DOM events makes one diagonal; numpad and vi stay instant', () => {
+    vi.useFakeTimers();
+    try {
+      const m = mk();
+      ui = m.ui;
+      key('ArrowUp');
+      key('ArrowLeft');
+      keyUp('ArrowUp');
+      keyUp('ArrowLeft');
+      vi.advanceTimersByTime(500);
+      expect(m.acts).toEqual([{ type: 'move', dir: 'nw' }]);
+      m.acts.length = 0;
+      key('ArrowUp', 'Numpad8');
+      key('k', 'KeyK');
+      expect(m.acts).toEqual([
+        { type: 'move', dir: 'n' },
+        { type: 'move', dir: 'n' },
+      ]);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   test('tap adjacent cell with one offer acts', async () => {
